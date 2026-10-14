@@ -70,7 +70,7 @@
     const st = stage.getContext('2d');
     st.fillStyle = '#000'; st.fillRect(0, 0, C.W, C.H);
 
-    const avg = order.length / 80; // ~80 active frames, plus freezes
+    const avg = order.length / 55; // ~55 active frames, plus freezes
     let done = 0, frontY = 0;
     while (done < order.length) {
       if (id !== job) { printing = false; return; }
@@ -97,7 +97,7 @@
         }
       }
       await frame();
-      if (Math.random() < 0.08) for (let f = 0; f < 3 + Math.floor(Math.random() * 6); f++) await frame(); // freeze
+      if (Math.random() < 0.06) for (let f = 0; f < 2 + Math.floor(Math.random() * 4); f++) await frame(); // freeze
     }
     actx.drawImage(src, 0, 0);
     printing = false;

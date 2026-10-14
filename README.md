@@ -47,7 +47,7 @@ Every conjuring is one of a kind: the seed mixes the poem with a random value. T
 
 ## Reveal
 
-After Submit the picture dissolves in as 16px blocks that arrive in clumps along a ragged front moving from top to bottom, in uneven lurches with brief freezes, stray blocks landing ahead and torn strips flickering sideways along the edge (about 1.5–2 seconds) (instant for people with reduced motion on). It never uses the same, or a near-identical, palette as the landing page backdrop.
+After Submit the picture dissolves in as 16px blocks that arrive in clumps along a ragged front moving from top to bottom, in uneven lurches with brief freezes, stray blocks landing ahead and torn strips flickering sideways along the edge (about 1–1.3 seconds) (instant for people with reduced motion on). It never uses the same, or a near-identical, palette as the landing page backdrop.
 
 ## Grayscale
 
