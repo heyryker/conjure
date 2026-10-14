@@ -50,13 +50,21 @@
     $('#back').focus({ preventScroll: true });
   });
 
-  // pixel dissolve: blocks of the finished image land in random order, slowly, easing in and out
+  // pixel dissolve in clumps, slowly, easing in and out
   async function reveal(src, id) {
     if (reduceMotion()) { actx.drawImage(src, 0, 0); return; }
     printing = true;
     const bs = 16, cols = C.W / bs, rows = Math.ceil(C.H / bs);
-    const order = Array.from({ length: cols * rows }, (_, i) => i);
-    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    // clumps: order blocks by a smooth noise field, so neighbours land together and patches
+    // grow outward from several spots; a little jitter keeps the edges ragged and pixelated
+    const noise = C.makeNoise(Math.random);
+    const sc = 0.035 + Math.random() * 0.03, o = Math.random() * 100;
+    const key = new Float32Array(cols * rows);
+    for (let i = 0; i < key.length; i++) {
+      const x = i % cols, y = Math.floor(i / cols);
+      key[i] = noise(x * sc + o, y * sc) * 0.7 + noise(x * sc * 2.3 + o, y * sc * 2.3 + 9) * 0.3 + Math.random() * 0.12;
+    }
+    const order = Array.from({ length: cols * rows }, (_, i) => i).sort((p, q) => key[p] - key[q]);
     const FRAMES = 150; // ~2.5s at 60fps
     let done = 0;
     for (let k = 1; k <= FRAMES; k++) {
