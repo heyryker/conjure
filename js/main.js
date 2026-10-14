@@ -151,5 +151,20 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
 
+  // backdrop: a fresh piece painted from a few random image words, never from anything typed
+  const WORDS = ['rain', 'river', 'salt', 'moon', 'feather', 'stone', 'bloom', 'smoke', 'tide', 'dusk', 'wing', 'glass',
+    'ember', 'field', 'mist', 'velvet', 'hollow', 'honey', 'static', 'shore', 'orchid', 'cloud', 'dream', 'skin'];
+  function paintBackdrop() {
+    const bd = $('#backdrop');
+    const r = () => WORDS[(crypto.getRandomValues(new Uint32Array(1))[0]) % WORDS.length];
+    const text = Array.from({ length: 4 }, () => `${r()} and ${r()}, the ${r()} ${r()}`).join('\n');
+    const piece = C.paint(C.analyze(text), crypto.getRandomValues(new Uint32Array(1))[0]);
+    bd.width = piece.canvas.width; bd.height = piece.canvas.height;
+    bd.getContext('2d').drawImage(piece.canvas, 0, 0);
+    bd.classList.add('ready');
+  }
+  // paint after first frame so the card shows immediately
+  requestAnimationFrame(() => setTimeout(paintBackdrop, 60));
+
   poem.focus();
 })((window.Conjure = window.Conjure || {}));
