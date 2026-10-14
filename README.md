@@ -24,12 +24,13 @@ Then in Vercel: **Add New → Project → Import** the repo. Framework preset: *
 
 `js/analyze.js` measures the poem (sound, rhythm, rhyme, punctuation, feeling, imagery). `js/render.js` uses those numbers to pick a **scene**, a **palette** and a **pixel size**, paints into a low-res buffer, dithers it into a few colors, lays fine 1-px lines on top, scales it up crisp to 1920×1080, then runs a grit stage: a print-style gradient wash, blurred light comets, melting drips, smeared and pixel-sorted streaks, a focus band with the rest drifting out of focus, smudges, bloom, stippled spray clouds and string-art hairlines. Grain, RGB split and glitch rows finish it.
 
-Every poem becomes one of two scenes:
+Every poem becomes one of three scenes:
 
 | Scene | Leans toward it |
 |---|---|
 | Field: a warped, dithered color field with one bloom per stanza, sometimes a band of line-blocks | feeling words, liquid sounds, love, body, run-on lines |
 | Landscape: dithered towers over a lake, fogged with distance | earth, water, air, calm, regular meter |
+| ASCII: the field (or a horizon) read out as a grid of characters by brightness, with one crisp band of type left readable over the grit | repetition, regular meter, commas, time, hard consonants |
 
 The older Poster, Columns and Tiles scenes are still in `render.js` and can be forced with `C.paint(features, seed, { scene: 'poster' })`, but they are out of the rotation. Palettes favor light, soft-vibrant grounds (Lilac, Peach Fog, Seafoam, Haze, Orchid, Periwinkle, Dusk).
 

@@ -96,7 +96,8 @@
     // poster / columns / tiles remain available through opts.scene.
     const scores = {
       skyline: ((t.earth || 0) + (t.water || 0)) * 0.6 + f.calm * 0.45 + (t.air || 0) * 0.3 + f.meter * 0.15,
-      knit: f.intensity * 0.35 + f.liquid * 0.35 + (t.love || 0) * 0.5 + (t.body || 0) * 0.3 + f.enjambment * 0.2
+      knit: f.intensity * 0.35 + f.liquid * 0.35 + (t.love || 0) * 0.5 + (t.body || 0) * 0.3 + f.enjambment * 0.2,
+      ascii: 0.2 + f.repetition * 0.4 + f.meter * 0.25 + clamp(f.comma) * 0.2 + (t.time || 0) * 0.3 + f.plosive * 0.2
     };
     let best = 'knit', bs = -1;
     for (const k in scores) { const s = scores[k] + rand() * 0.55; if (s > bs) { bs = s; best = k; } }
@@ -150,6 +151,7 @@
     if (scene === 'columns') W0 = 240;
     if (scene === 'knit') W0 = delicacy > 0.5 && rand() < 0.6 ? 240 : 160;
     if (scene === 'skyline') W0 = 320;
+    if (scene === 'ascii') W0 = 240;
     const H0 = Math.round((W0 * 9) / 16);
     const B = buf(W0, H0, G);
     const A = buf(AW, AH, -1);
@@ -466,7 +468,69 @@
       });
     }
 
-    const SCENES = { poster: SCENES_poster, columns: SCENES_columns, tiles: SCENES_tiles, skyline: SCENES_skyline, knit: SCENES_knit };
+    // ascii: a warped field (or a horizon of towers) read out as a grid of characters by brightness.
+    // The buffer only carries a faint dithered under-layer; the characters are drawn at full size later.
+    const asciiField = (() => {
+      const o = rand() * 60, sc = 1.2 + rand() * 1.6, warp = 0.5 + f.sibilant * 0.9 + rand() * 0.5;
+      const blooms = Array.from({ length: clamp(f.stanzaCount || 1, 1, 4) }, () => ({ x: 0.2 + rand() * 1.4, y: 0.2 + rand() * 0.6, r: 0.9 + rand() * 1.1 }));
+      const horizon = (f.themes.earth || 0) + (f.themes.water || 0) > 0.3 || rand() < 0.3;
+      const hor = 0.35 + rand() * 0.2;
+      return (nx, ny) => { // nx in 0..16/9, ny in 0..1
+        const q = fbm(noise, nx * 1.1 + o, ny * 1.1, 2) * warp;
+        let v = unit(fbm(noise, nx * sc + o + q, ny * sc + q, 4) * 1.3) * 0.6;
+        for (const b of blooms) v += clamp(1 - Math.hypot(nx + q * 0.3 - b.x, ny - b.y) * b.r) * 0.45;
+        if (horizon) {
+          const ridge = hor + unit(fbm(noise, nx * 2.2 + o, 3.1, 3)) * 0.25 - 0.12;
+          v = ny < ridge ? v * 0.45 : clamp(v * 0.7 + 0.35 + (ny - ridge) * 0.4);
+        }
+        return clamp(v);
+      };
+    })();
+    function SCENES_ascii() {
+      const dim = tone(G, inks[0], 0.12);
+      for (let y = 0; y < H0; y++) for (let x = 0; x < W0; x++) {
+        const v = asciiField(x / H0, y / H0);
+        B.d[y * W0 + x] = v * 0.5 + bayer(x, y) > 1 ? dim : G;
+      }
+    }
+    let asciiRamp = null, asciiFs = 0;
+    function drawAscii(c, band) {
+      const ramps = {
+        classic: ' .,:;-=+*x#%@',
+        blocks: ' ·░▒▓█',
+        dots: ' .·•●',
+        long: " .'`^,:;Il!i~+_-?]}1)|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
+      };
+      const ramp = asciiRamp || (asciiRamp = f.plosive > 0.6 ? ramps.blocks : f.sibilant > 0.6 ? ramps.long : (rand() < 0.3 ? ramps.dots : ramps.classic));
+      const fs = asciiFs || (asciiFs = Math.round(20 + (1 - delicacy) * 14)); // softer poems -> smaller, finer type
+      const cw = Math.ceil(fs * 0.62), ch = Math.ceil(fs * 1.05);
+      c.save();
+      c.font = `600 ${fs}px ui-monospace, "SFMono-Regular", Menlo, Consolas, "Courier New", monospace`;
+      c.textBaseline = 'top';
+      // denser cells get the colors that stand out most from the ground
+      const colorRamp = inks.slice().sort((a, b) => Math.abs(lum(P[a]) - lum(P[G])) - Math.abs(lum(P[b]) - lum(P[G]))).slice(-4);
+      for (let y = 0; y < OH; y += ch) {
+        if (band && (y < band[0] || y > band[1])) continue;
+        for (let x = 0; x < OW; x += cw) {
+          const v = asciiField((x + cw / 2) / OH, (y + ch / 2) / OH);
+          const bx = Math.floor(x / cw), by = Math.floor(y / ch);
+          const t = clamp(v * 1.15 - 0.05 + (bayer(bx, by) - 0.5) * 0.2);
+          const gi = Math.min(ramp.length - 1, Math.floor(t * ramp.length));
+          if (gi === 0) continue;
+          const col = colorRamp[Math.min(colorRamp.length - 1, Math.floor(t * colorRamp.length))];
+          if (t > 0.95 && bayer(bx + 2, by + 1) < 0.25) { // dense cells flip: solid block, ground-colored glyph
+            c.fillStyle = `rgb(${P[col].join(',')})`;
+            c.fillRect(x, y, cw, ch);
+            c.fillStyle = `rgb(${P[G].join(',')})`;
+          } else {
+            c.fillStyle = `rgb(${P[col].join(',')})`;
+          }
+          c.fillText(ramp[gi], x, y);
+        }
+      }
+      c.restore();
+    }
+    const SCENES = { poster: SCENES_poster, columns: SCENES_columns, tiles: SCENES_tiles, skyline: SCENES_skyline, knit: SCENES_knit, ascii: SCENES_ascii };
     SCENES[scene]();
 
     /* ===== fine accents (2 output px) ===== */
@@ -553,6 +617,7 @@
     const ctx = out.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(mid, 0, 0, OW, OH);
+    if (scene === 'ascii') drawAscii(ctx);
 
     /* ===== grit: gradient wash, light comets, melt, smear, focus blur, smudges, bloom, spray, string lines ===== */
     const grit = {
@@ -564,6 +629,9 @@
       spray: clamp(0.3 + clamp(f.comma) * 0.35 + f.plosive * 0.3 + rand() * 0.35),
       strings: clamp(f.rhyme * 0.6 + f.repetition * 0.5 + rand() * 0.45)
     };
+    if (scene === 'ascii') { // keep the characters legible: lighter blur, spray and wash; melt and smear stay
+      grit.blur *= 0.35; grit.spray *= 0.35; grit.wash *= 0.55; grit.cones = Math.min(grit.cones, 1);
+    }
 
     function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
     function blurred(src, k) {
@@ -577,6 +645,10 @@
     }
     const css = (i, a) => `rgba(${P[i][0]},${P[i][1]},${P[i][2]},${a})`;
     applyGrit();
+    if (scene === 'ascii') { // a crisp, readable band of type over the gritty layer
+      const cy = OH * (0.25 + rand() * 0.5), hh = OH * (0.12 + rand() * 0.16);
+      ctx.save(); ctx.globalAlpha = 0.9; drawAscii(ctx, [cy - hh, cy + hh]); ctx.restore();
+    }
 
     function applyGrit() {
       // 1. gradient wash: a broad print-like gradient over everything, sometimes as vertical strips
