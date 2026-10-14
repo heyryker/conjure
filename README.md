@@ -37,6 +37,10 @@ Other mappings: hard consonants make bigger pixels, soft ones finer; dashes and 
 
 Every conjuring is one of a kind: the seed mixes the poem with a random value. The poem is cleared from the page on submit and is never stored or sent anywhere.
 
+## Grayscale
+
+The result view has a Color / Grayscale switch. Grayscale tries a few channel mixes (like a photographer's colored filters), keeps the one with the most contrast, stretches it to full black-to-white and adds a gentle S-curve. Download saves whichever version is showing.
+
 ## Files
 
 ```

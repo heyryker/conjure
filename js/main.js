@@ -10,7 +10,8 @@
   art.width = C.W; art.height = C.H;
   const actx = art.getContext('2d');
   actx.imageSmoothingEnabled = false;
-  let current = null; // { canvas, serial }
+  let current = null; // { canvas, gray, serial }
+  let mode = 'color'; // stays for the session so the next piece opens in the same mode
   let job = 0;
 
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -41,8 +42,9 @@
     if (id !== job) return;
 
     current = C.paint(features, seed);
+    current.gray = null;
     features = null;
-    await reveal(current.canvas, id);
+    await reveal(shown(), id);
     $('#back').focus({ preventScroll: true });
   });
 
@@ -64,6 +66,53 @@
     actx.drawImage(src, 0, 0);
   }
 
+  // grayscale: luminance with a gentle S-curve so the darks and lights keep their bite
+  function toGray(src) {
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const x = c.getContext('2d');
+    x.drawImage(src, 0, 0);
+    const img = x.getImageData(0, 0, c.width, c.height), d = img.data;
+    // luminance, then auto-levels (stretch the 1st–99th percentile to full black–white),
+    // so colors that were bright but similar in value still separate
+    // like a photographer's colored filter: try a few channel mixes, keep the one with most contrast
+    const mixes = [[0.2126, 0.7152, 0.0722], [0.7, 0.25, 0.05], [0.1, 0.3, 0.6], [0.3, 0.6, 0.1], [0.55, 0.05, 0.4]];
+    let w = mixes[0], best = -1;
+    for (const m of mixes) {
+      let s = 0, s2 = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4 * 97) { const v = m[0] * d[i] + m[1] * d[i + 1] + m[2] * d[i + 2]; s += v; s2 += v * v; n++; }
+      const sd = Math.sqrt(s2 / n - (s / n) ** 2);
+      if (sd > best) { best = sd; w = m; }
+    }
+    const L = new Uint8ClampedArray(d.length / 4), hist = new Uint32Array(256);
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+      L[j] = Math.round(w[0] * d[i] + w[1] * d[i + 1] + w[2] * d[i + 2]);
+      hist[L[j]]++;
+    }
+    const pct = (p) => { let acc = 0; for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= L.length * p) return v; } return 255; };
+    const lo = pct(0.01), hi = Math.max(lo + 1, pct(0.99));
+    const curve = new Uint8ClampedArray(256);
+    for (let i = 0; i < 256; i++) {
+      const t = Math.min(1, Math.max(0, (i - lo) / (hi - lo))), s = t * t * (3 - 2 * t);
+      curve[i] = Math.round((t * 0.4 + s * 0.6) * 255);
+    }
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) d[i] = d[i + 1] = d[i + 2] = curve[L[j]];
+    x.putImageData(img, 0, 0);
+    return c;
+  }
+  function shown() {
+    if (mode === 'gray') return current.gray || (current.gray = toGray(current.canvas));
+    return current.canvas;
+  }
+  function setMode(m) {
+    mode = m;
+    $('#mode-color').setAttribute('aria-pressed', String(m === 'color'));
+    $('#mode-gray').setAttribute('aria-pressed', String(m === 'gray'));
+    if (current) actx.drawImage(shown(), 0, 0);
+  }
+  $('#mode-color').addEventListener('click', () => setMode('color'));
+  $('#mode-gray').addEventListener('click', () => setMode('gray'));
+
   function back() {
     job++;
     current = null;
@@ -84,8 +133,8 @@
 
   $('#download').addEventListener('click', async () => {
     if (!current) return;
-    const filename = `conjure-${current.serial.toLowerCase()}.png`;
-    const blob = await new Promise((r) => current.canvas.toBlob(r, 'image/png'));
+    const filename = `conjure-${current.serial.toLowerCase()}${mode === 'gray' ? '-gray' : ''}.png`;
+    const blob = await new Promise((r) => shown().toBlob(r, 'image/png'));
     if (!blob) { say('Couldn’t make the file. Try again.'); return; }
 
     // inside a Claude artifact the viewer handles saving; elsewhere use a normal download

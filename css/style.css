@@ -121,6 +121,36 @@ body {
 .pill svg { width: 16px; height: 16px; }
 .pill-dark { background: rgba(17, 17, 17, 0.9); color: #fff; }
 .pill-dark:hover { background: #111; }
+.seg {
+  pointer-events: auto;
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  height: 44px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.seg-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 14px;
+  background: transparent;
+  color: #555;
+  font: 500 13px/1 var(--sans);
+  cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+.seg-btn[aria-pressed="true"] { background: #111; color: #fff; }
+.seg-btn:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+@media (max-width: 520px) {
+  .bar { flex-wrap: wrap; }
+  .seg { order: -1; width: 100%; justify-content: center; }
+  .seg-btn { flex: 1; }
+}
 .toast {
   position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
