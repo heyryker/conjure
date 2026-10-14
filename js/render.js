@@ -104,9 +104,14 @@
     return best;
   }
 
-  function pickPalette(f, rand, scene) {
+  function pickPalette(f, rand, scene, avoid) {
+    // never repeat the avoided palette, nor one whose ground or lead ink sits close to it
+    const near = (a, b) => { const x = hexRgb(a), y = hexRgb(b); return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) < 70; };
+    const banned = avoid && PALETTES.find((p) => p.name === avoid);
+    const ok = (p) => !banned || (p !== banned && !near(p.c[0], banned.c[0]) && !near(p.c[1], banned.c[1]));
     let best = PALETTES[0], bs = -Infinity;
     for (const p of PALETTES) {
+      if (!ok(p)) continue;
       let s = rand() * 0.7 + (p.soft ? 0.7 : 0) - (p.dark ? 0.6 : 0);
       for (const k in p.tags) s += (f.themes[k] || 0) * p.tags[k];
       s += (p.energy || 0) * f.energy * 0.5;
@@ -125,7 +130,7 @@
     const noise = C.makeNoise(rand);
     const picked = pickScene(f, rand);
     const scene = (opts && opts.scene) || picked;
-    const pal = pickPalette(f, rand, scene);
+    const pal = pickPalette(f, rand, scene, opts && opts.avoidPalette);
 
     // palette as RGB list; derived tones get appended on demand
     const P = pal.c.map(hexRgb);
