@@ -162,11 +162,15 @@
     bd.width = piece.canvas.width; bd.height = piece.canvas.height;
     bd.getContext('2d').drawImage(piece.canvas, 0, 0);
     bd.classList.add('ready');
-    $('.card-head').style.backgroundColor = bannerColor(piece.colors, bd);
+    const { base, alt } = bannerColors(piece.colors, bd);
+    const head = $('.card-head');
+    head.style.backgroundColor = `rgb(${base.join(',')})`;
+    head.style.backgroundImage = `url(${bannerTexture(base, alt, head)})`;
+    head.classList.add('textured');
   }
   // banner: a palette color that stands apart from what dominates the backdrop,
   // deepened if needed so the white logo reads on it (contrast >= 3:1)
-  function bannerColor(hexes, bd) {
+  function bannerColors(hexes, bd) {
     const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
     const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
     const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
@@ -181,9 +185,67 @@
     const dist = (c) => Math.hypot(c[0] - avg[0], c[1] - avg[1], c[2] - avg[2]);
     const sat = (c) => Math.max(...c) - Math.min(...c);
     const deepen = (c) => { let k = 1; let o = c; while (onWhite(o) < 3 && k > 0.2) { k -= 0.05; o = c.map((v) => Math.round(v * k)); } return o; };
-    const best = hexes.map(rgb).filter((c) => sat(c) > 40).map(deepen)
-      .sort((a, b) => (dist(b) + sat(b) * 0.5) - (dist(a) + sat(a) * 0.5))[0] || [17, 17, 17];
-    return `rgb(${best.join(',')})`;
+    const ranked = hexes.map(rgb).filter((c) => sat(c) > 40).map(deepen)
+      .sort((a, b) => (dist(b) + sat(b) * 0.5) - (dist(a) + sat(a) * 0.5));
+    const base = ranked[0] || [17, 17, 17];
+    const alt = ranked[1] || base.map((v) => Math.round(v * 0.6));
+    return { base, alt };
+  }
+
+  // pixel grit for the banner: chunky dithered cells blending base -> alt, a few smeared rows,
+  // sparse specks and fine grain, kept dark enough that the white logo always reads
+  function bannerTexture(base, alt, el) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = Math.round(el.clientWidth * dpr), H = Math.round(el.clientHeight * dpr);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const img = x.createImageData(W, H), d = img.data;
+    const rnd = C.prng(crypto.getRandomValues(new Uint32Array(1))[0]);
+    const noise = C.makeNoise(rnd);
+    const cell = Math.round(5 * dpr);
+    const bay = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+    const deep = base.map((v) => Math.round(v * 0.72));
+    const phase = rnd() * 10, tilt = rnd() < 0.5 ? 1 : -1;
+    const smears = Array.from({ length: 2 + Math.floor(rnd() * 3) }, () => ({ y: Math.floor(rnd() * H), h: Math.round((1 + rnd() * 3) * dpr), x0: Math.floor(rnd() * W * 0.6), len: Math.floor(W * (0.15 + rnd() * 0.4)) }));
+    for (let cy = 0; cy * cell < H; cy++) {
+      for (let cx = 0; cx * cell < W; cx++) {
+        const u = (cx * cell) / W, v = (cy * cell) / H;
+        let t = 0.5 + 0.5 * noise(u * 3 + phase, v * 1.5) + (tilt > 0 ? u - 0.5 : 0.5 - u) * 0.6;
+        t = Math.max(0, Math.min(1, t));
+        const lvl = Math.min(2, Math.floor(t * 2 + bay[cy & 3][cx & 3] / 16));
+        const col = [deep, base, alt][lvl];
+        for (let yy = cy * cell; yy < Math.min(H, (cy + 1) * cell); yy++) {
+          for (let xx = cx * cell; xx < Math.min(W, (cx + 1) * cell); xx++) {
+            const i = (yy * W + xx) * 4;
+            d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
+          }
+        }
+      }
+    }
+    // smeared rows: drag color along a few short bands
+    for (const sm of smears) {
+      for (let yy = sm.y; yy < Math.min(H, sm.y + sm.h); yy++) {
+        let r = -1, g = 0, b = 0;
+        for (let xx = sm.x0; xx < Math.min(W, sm.x0 + sm.len); xx++) {
+          const i = (yy * W + xx) * 4;
+          if (r < 0) { r = d[i]; g = d[i + 1]; b = d[i + 2]; }
+          r += (d[i] - r) * 0.06; g += (d[i + 1] - g) * 0.06; b += (d[i + 2] - b) * 0.06;
+          d[i] = r; d[i + 1] = g; d[i + 2] = b;
+        }
+      }
+    }
+    // specks + grain
+    for (let n = 0; n < W * H * 0.004; n++) {
+      const i = (Math.floor(rnd() * H) * W + Math.floor(rnd() * W)) * 4;
+      const lift = rnd() < 0.5 ? 60 : -50;
+      d[i] += lift; d[i + 1] += lift; d[i + 2] += lift;
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      const g = (rnd() - 0.5) * 26;
+      d[i] += g; d[i + 1] += g; d[i + 2] += g;
+    }
+    x.putImageData(img, 0, 0);
+    return c.toDataURL('image/png');
   }
 
   // paint after first frame so the card shows immediately

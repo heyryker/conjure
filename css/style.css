@@ -49,6 +49,8 @@ body {
   grid-template-rows: auto 1fr auto;
 }
 .card-head { padding: 18px 24px; background-color: #111; transition: background-color 1.2s ease; }
+.card-head.textured { background-size: 100% 100%; image-rendering: pixelated; }
+.logo { filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.25)); }
 .logo { width: 132px; height: auto; color: #fff; display: block; }
 .poem {
   width: 100%;
