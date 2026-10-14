@@ -45,9 +45,9 @@ Every conjuring is one of a kind: the seed mixes the poem with a random value. T
 - **Heatmap:** a thermal-camera recolouring (deep blue → magenta → red → orange → white-hot, or the piece's own palette ramped by brightness), applied to a noise-shaped region, in bands, or rarely over the whole image. More intense and energetic poems get it more often.
 - **Breaking the rules:** about 1 in 10 pieces is wild: any of the six scenes, any palette (dark ones included), every effect pushed to an extreme in one direction or the other, any square size, heavy glitch and RGB split, and sometimes a mirror fold, inverted colour, or a second scene spliced in along a jagged pixel edge.
 
-## Postmodern collage
+## Grunge
 
-About 60% of pieces (85% of wild ones) get a crisp collage layer on top of the grit, in the spirit of Memphis design: flat half-discs, triangles, arches and rings with hard black offset shadows, thick squiggles and zigzags, striped slabs, dot grids and confetti, big serif marks (&, §, N°, ※, ¶ …), and cut-outs of the picture itself pasted elsewhere with a white border, sometimes rotated or flipped. More energetic or open-ended poems get more pieces. Nothing from the poem's text is ever drawn.
+About 75% of pieces (90% of wild ones) get a grunge pass after the grit: photocopier contrast crush, patchy grime that gathers toward the edges, fold creases (a dark valley beside a bright ridge), coffee-ring stains and soft blots, long film scratches and short scuffs, dust and the odd hair, and burnt, uneven edges. How dirty it gets rises with darker feeling, hard consonants, and night or earth imagery.
 
 ## Reveal
 
