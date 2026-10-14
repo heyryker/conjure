@@ -65,7 +65,7 @@
       key[i] = noise(x * sc + o, y * sc) * 0.7 + noise(x * sc * 2.3 + o, y * sc * 2.3 + 9) * 0.3 + Math.random() * 0.12;
     }
     const order = Array.from({ length: cols * rows }, (_, i) => i).sort((p, q) => key[p] - key[q]);
-    const FRAMES = 150; // ~2.5s at 60fps
+    const FRAMES = 96; // ~1.6s at 60fps
     let done = 0;
     for (let k = 1; k <= FRAMES; k++) {
       if (id !== job) { printing = false; return; }
