@@ -126,7 +126,7 @@ body {
   height: 44px;
   padding: 0 18px 0 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.92);
   color: #111;
   font: 500 14px/1 var(--sans);
@@ -147,7 +147,7 @@ body {
   padding: 4px;
   gap: 2px;
   height: 44px;
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(8px);
@@ -156,7 +156,7 @@ body {
 .seg-btn {
   appearance: none;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0 14px;
   background: transparent;
   color: #555;
