@@ -162,6 +162,19 @@
     bd.width = piece.canvas.width; bd.height = piece.canvas.height;
     bd.getContext('2d').drawImage(piece.canvas, 0, 0);
     bd.classList.add('ready');
+    $('.logo').style.color = logoColor(piece.colors);
+  }
+  // pick a palette color that reads on the white card: most vivid among those with enough contrast
+  function logoColor(hexes) {
+    const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const info = hexes.map((h) => {
+      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const L = 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+      return { h, contrast: 1.05 / (L + 0.05), sat: Math.max(...c) - Math.min(...c) };
+    });
+    const readable = info.filter((x) => x.contrast >= 3);
+    if (readable.length) return readable.sort((a, b) => b.sat - a.sat)[0].h;
+    return info.sort((a, b) => b.contrast - a.contrast)[0].h;
   }
   // paint after first frame so the card shows immediately
   requestAnimationFrame(() => setTimeout(paintBackdrop, 60));

@@ -49,7 +49,7 @@ body {
   grid-template-rows: auto 1fr auto;
 }
 .card-head { padding: 24px 24px 8px; }
-.logo { width: 132px; height: auto; color: var(--ink); display: block; }
+.logo { width: 132px; height: auto; color: var(--ink); display: block; transition: color 1.2s ease; }
 .poem {
   width: 100%;
   min-height: clamp(220px, 36vh, 360px);

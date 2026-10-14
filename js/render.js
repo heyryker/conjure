@@ -809,6 +809,6 @@
     }
     ctx.putImageData(fin, 0, 0);
 
-    return { canvas: out, scene, grit, palette: pal.name, pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
+    return { canvas: out, scene, grit, palette: pal.name, colors: pal.c.slice(), pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
   };
 })((window.Conjure = window.Conjure || {}));
