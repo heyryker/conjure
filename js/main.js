@@ -50,32 +50,54 @@
     $('#back').focus({ preventScroll: true });
   });
 
-  // pixel dissolve in clumps, slowly, easing in and out
+  // pixel dissolve, top to bottom, jarring: the front lurches in uneven bursts with freezes,
+  // stray blocks land far ahead, and torn strips flicker sideways along the edge
   async function reveal(src, id) {
     if (reduceMotion()) { actx.drawImage(src, 0, 0); return; }
     printing = true;
     const bs = 16, cols = C.W / bs, rows = Math.ceil(C.H / bs);
-    // clumps: blocks arrive top to bottom along a noisy, ragged front, so neighbours land together
     const noise = C.makeNoise(Math.random);
     const sc = 0.035 + Math.random() * 0.03, o = Math.random() * 100;
     const key = new Float32Array(cols * rows);
     for (let i = 0; i < key.length; i++) {
       const x = i % cols, y = Math.floor(i / cols);
-      // top-down: row position leads, noise makes the advancing edge clumpy and ragged
-      key[i] = (y / rows) * 1.6 + noise(x * sc + o, y * sc) * 0.35 + noise(x * sc * 2.3 + o, y * sc * 2.3 + 9) * 0.15 + Math.random() * 0.08;
+      key[i] = Math.random() < 0.04
+        ? Math.random() * 1.8 // strays
+        : (y / rows) * 1.6 + noise(x * sc + o, y * sc) * 0.35 + noise(x * sc * 2.3 + o, y * sc * 2.3 + 9) * 0.15 + Math.random() * 0.22;
     }
     const order = Array.from({ length: cols * rows }, (_, i) => i).sort((p, q) => key[p] - key[q]);
-    const FRAMES = 96; // ~1.6s at 60fps
-    let done = 0;
-    for (let k = 1; k <= FRAMES; k++) {
+    const stage = document.createElement('canvas'); stage.width = C.W; stage.height = C.H;
+    const st = stage.getContext('2d');
+    st.fillStyle = '#000'; st.fillRect(0, 0, C.W, C.H);
+
+    const avg = order.length / 80; // ~80 active frames, plus freezes
+    let done = 0, frontY = 0;
+    while (done < order.length) {
       if (id !== job) { printing = false; return; }
-      const t = k / FRAMES, eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
-      const upto = Math.round(eased * order.length);
+      // bursts: sometimes a big lurch, sometimes a crawl, sometimes nothing
+      const r = Math.random();
+      const step = r < 0.12 ? 0 : r < 0.3 ? avg * 0.3 : r < 0.85 ? avg : avg * (2.5 + Math.random() * 2);
+      const upto = Math.min(order.length, done + Math.round(step));
       for (; done < upto; done++) {
         const i = order[done], x = (i % cols) * bs, y = Math.floor(i / cols) * bs;
-        actx.drawImage(src, x, y, bs, bs, x, y, bs, bs);
+        st.drawImage(src, x, y, bs, bs, x, y, bs, bs);
+        if (key[i] < 1.7) frontY = Math.max(frontY, y);
+      }
+      actx.drawImage(stage, 0, 0);
+      // tears along the front: strips of the finished image shoved sideways, gone next frame
+      const tears = Math.random() < 0.7 ? 1 + Math.floor(Math.random() * 3) : 0;
+      for (let t = 0; t < tears; t++) {
+        const h = bs * (1 + Math.floor(Math.random() * 3));
+        const y = Math.max(0, Math.min(C.H - h, frontY - bs * 4 + Math.floor(Math.random() * 6) * bs));
+        const shift = Math.round((Math.random() - 0.5) * 2 * (30 + Math.random() * 160));
+        actx.drawImage(src, 0, y, C.W, h, shift, y, C.W, h);
+        if (Math.random() < 0.4) { // a thin color-split line
+          actx.save(); actx.globalCompositeOperation = 'screen'; actx.globalAlpha = 0.6;
+          actx.drawImage(src, 0, y, C.W, 4, -shift / 2, y + h, C.W, 4); actx.restore();
+        }
       }
       await frame();
+      if (Math.random() < 0.08) for (let f = 0; f < 3 + Math.floor(Math.random() * 6); f++) await frame(); // freeze
     }
     actx.drawImage(src, 0, 0);
     printing = false;
