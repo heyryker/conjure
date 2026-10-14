@@ -38,7 +38,7 @@
     const id = ++job;
     write.hidden = true;
     view.hidden = false;
-    actx.fillStyle = PAPER;
+    actx.fillStyle = '#000';
     actx.fillRect(0, 0, C.W, C.H);
     await frame(); await frame();
     if (id !== job) return;
@@ -50,68 +50,27 @@
     $('#back').focus({ preventScroll: true });
   });
 
-  // print: an inkjet head sweeps across the paper in swaths, back and forth, advancing down the page.
-  // Each swath goes down in two passes: a light, slightly misregistered first pass, then full ink
-  // when the head comes back over it on the next sweep.
-  const PAPER = '#f2f1ec';
+  // pixel dissolve: blocks of the finished image land in random order, slowly, easing in and out
   async function reveal(src, id) {
     if (reduceMotion()) { actx.drawImage(src, 0, 0); return; }
     printing = true;
-    const W = C.W, H = C.H;
-    const paper = document.createElement('canvas'); paper.width = W; paper.height = H;
-    const p = paper.getContext('2d');
-    p.fillStyle = PAPER; p.fillRect(0, 0, W, H);
-    const SW = 40;                    // swath height
-    const swaths = Math.ceil(H / SW);
-    const STEPS = 9;                  // frames per sweep
-    const headW = 46;
-    const jitter = () => Math.round((Math.random() - 0.5) * 6);
-    for (let s = 0; s <= swaths; s++) {
-      const dir = s % 2 ? -1 : 1;
-      const y = s * SW, j = jitter();
-      let prevEdge = dir > 0 ? 0 : W;
-      for (let k = 1; k <= STEPS; k++) {
-        if (id !== job) { printing = false; return; }
-        const edge = dir > 0 ? Math.round((W * k) / STEPS) : Math.round(W - (W * k) / STEPS);
-        const x0 = Math.min(prevEdge, edge), w = Math.abs(edge - prevEdge);
-        // first pass on this swath: light ink, slightly off-register
-        if (s < swaths) {
-          p.globalAlpha = 0.5;
-          p.drawImage(src, x0, y, w, SW, x0 + j, y, w, SW);
-        }
-        // second pass on the swath above: full ink, in register
-        if (s > 0) {
-          p.globalAlpha = 1;
-          p.fillStyle = PAPER; p.fillRect(x0, y - SW, w, SW);
-          p.drawImage(src, x0, y - SW, w, SW, x0, y - SW, w, SW);
-        }
-        p.globalAlpha = 1;
-        actx.drawImage(paper, 0, 0);
-        drawHead(edge, y, dir);
-        prevEdge = edge;
-        await frame();
-        if (s % 7 === 3 && k === STEPS) { for (let t = 0; t < 4; t++) await frame(); } // the occasional pause
+    const bs = 40, cols = C.W / bs, rows = Math.ceil(C.H / bs);
+    const order = Array.from({ length: cols * rows }, (_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    const FRAMES = 150; // ~2.5s at 60fps
+    let done = 0;
+    for (let k = 1; k <= FRAMES; k++) {
+      if (id !== job) { printing = false; return; }
+      const t = k / FRAMES, eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+      const upto = Math.round(eased * order.length);
+      for (; done < upto; done++) {
+        const i = order[done], x = (i % cols) * bs, y = Math.floor(i / cols) * bs;
+        actx.drawImage(src, x, y, bs, bs, x, y, bs, bs);
       }
+      await frame();
     }
     actx.drawImage(src, 0, 0);
     printing = false;
-
-    function drawHead(x, y, dir) {
-      const top = Math.max(0, y - SW - 6), h = Math.min(H, y + SW + 6) - top;
-      const hx = x - (dir > 0 ? headW : 0);
-      actx.save();
-      actx.fillStyle = 'rgba(0,0,0,0.18)';                  // soft shadow on the paper
-      actx.fillRect(hx + 6 * dir, top + 4, headW, h);
-      actx.fillStyle = '#1b1b1d';                           // carriage
-      actx.fillRect(hx, top, headW, h);
-      actx.fillStyle = '#3a3a3f';
-      actx.fillRect(hx + 6, top + 6, headW - 12, h - 12);
-      const inks = ['#00b7eb', '#ff2e93', '#ffe100', '#111'];  // nozzle row: C M Y K
-      inks.forEach((c, i) => { actx.fillStyle = c; actx.fillRect(hx + 9 + i * 8, top + h - 16, 5, 8); });
-      actx.fillStyle = 'rgba(0,0,0,0.12)';                  // the rail across the page
-      actx.fillRect(0, top + h / 2 - 1, W, 2);
-      actx.restore();
-    }
   }
 
   // grayscale: luminance with a gentle S-curve so the darks and lights keep their bite

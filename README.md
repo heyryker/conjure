@@ -38,9 +38,9 @@ Other mappings: hard consonants make bigger pixels, soft ones finer; dashes and 
 
 Every conjuring is one of a kind: the seed mixes the poem with a random value. The poem is cleared from the page on submit and is never stored or sent anywhere.
 
-## Printing
+## Reveal
 
-After Submit the picture prints onto paper: an inkjet head sweeps back and forth in 40px swaths, laying a light, slightly off-register first pass and full ink on the return sweep, with the odd pause. It never uses the same (or a near-identical) palette as the landing page backdrop. Users with reduced motion enabled see it appear at once.
+After Submit the picture dissolves in as 40px blocks landing in random order over about 2.5 seconds (instant for people with reduced motion on). It never uses the same, or a near-identical, palette as the landing page backdrop.
 
 ## Grayscale
 
@@ -54,7 +54,7 @@ css/style.css         writing card + full-bleed view
 js/utils.js           hash, seeded random, simplex noise, OKLCH color
 js/analyze.js         poem -> factors
 js/render.js          factors -> pixel scenes -> 1920×1080 canvas
-js/main.js            writing card, backdrop + banner, inkjet print reveal, grayscale, PNG download
+js/main.js            writing card, backdrop + banner, slow pixel-dissolve reveal, grayscale, PNG download
 assets/               logo
 scripts/build-preview.mjs   optional single-file build for sharing a preview
 ```
