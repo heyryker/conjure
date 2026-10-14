@@ -40,7 +40,7 @@ Every conjuring is one of a kind: the seed mixes the poem with a random value. T
 
 ## Reveal
 
-After Submit the picture dissolves in as 40px blocks landing in random order over about 2.5 seconds (instant for people with reduced motion on). It never uses the same, or a near-identical, palette as the landing page backdrop.
+After Submit the picture dissolves in as 16px blocks landing in random order over about 2.5 seconds (instant for people with reduced motion on). It never uses the same, or a near-identical, palette as the landing page backdrop.
 
 ## Grayscale
 

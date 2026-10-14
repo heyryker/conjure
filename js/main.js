@@ -54,7 +54,7 @@
   async function reveal(src, id) {
     if (reduceMotion()) { actx.drawImage(src, 0, 0); return; }
     printing = true;
-    const bs = 40, cols = C.W / bs, rows = Math.ceil(C.H / bs);
+    const bs = 16, cols = C.W / bs, rows = Math.ceil(C.H / bs);
     const order = Array.from({ length: cols * rows }, (_, i) => i);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
     const FRAMES = 150; // ~2.5s at 60fps
