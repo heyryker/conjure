@@ -55,14 +55,14 @@
     if (reduceMotion()) { actx.drawImage(src, 0, 0); return; }
     printing = true;
     const bs = 16, cols = C.W / bs, rows = Math.ceil(C.H / bs);
-    // clumps: order blocks by a smooth noise field, so neighbours land together and patches
-    // grow outward from several spots; a little jitter keeps the edges ragged and pixelated
+    // clumps: blocks arrive top to bottom along a noisy, ragged front, so neighbours land together
     const noise = C.makeNoise(Math.random);
     const sc = 0.035 + Math.random() * 0.03, o = Math.random() * 100;
     const key = new Float32Array(cols * rows);
     for (let i = 0; i < key.length; i++) {
       const x = i % cols, y = Math.floor(i / cols);
-      key[i] = noise(x * sc + o, y * sc) * 0.7 + noise(x * sc * 2.3 + o, y * sc * 2.3 + 9) * 0.3 + Math.random() * 0.12;
+      // top-down: row position leads, noise makes the advancing edge clumpy and ragged
+      key[i] = (y / rows) * 1.6 + noise(x * sc + o, y * sc) * 0.35 + noise(x * sc * 2.3 + o, y * sc * 2.3 + 9) * 0.15 + Math.random() * 0.08;
     }
     const order = Array.from({ length: cols * rows }, (_, i) => i).sort((p, q) => key[p] - key[q]);
     const FRAMES = 96; // ~1.6s at 60fps
