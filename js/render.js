@@ -501,7 +501,7 @@
         dots: ' .·•●',
         long: " .'`^,:;Il!i~+_-?]}1)|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
       };
-      const ramp = asciiRamp || (asciiRamp = f.plosive > 0.6 ? ramps.blocks : f.sibilant > 0.6 ? ramps.long : (rand() < 0.3 ? ramps.dots : ramps.classic));
+      const ramp = asciiRamp || (asciiRamp = f.plosive > 0.6 ? ramps.classic : f.sibilant > 0.6 ? ramps.long : (rand() < 0.3 ? ramps.dots : ramps.classic));
       const fs = asciiFs || (asciiFs = Math.round(20 + (1 - delicacy) * 14)); // softer poems -> smaller, finer type
       const cw = Math.ceil(fs * 0.62), ch = Math.ceil(fs * 1.05);
       c.save();
