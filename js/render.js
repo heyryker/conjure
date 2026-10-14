@@ -545,6 +545,212 @@
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(mid, 0, 0, OW, OH);
 
+    /* ===== grit: gradient wash, light comets, melt, smear, focus blur, smudges, bloom, spray, string lines ===== */
+    const grit = {
+      wash: clamp(0.35 + f.intensity * 0.35 + rand() * 0.3),
+      cones: Math.round(rand() * 2 + f.openness * 3 + f.vowelBright * 2),
+      melt: clamp((f.sentiment < 0 ? -f.sentiment : 0) * 0.8 + (f.themes.fire || 0) * 0.6 + (f.themes.night || 0) * 0.3 + rand() * 0.4),
+      smear: clamp(0.35 + f.sibilant * 0.35 + f.enjambment * 0.3 + rand() * 0.3),
+      blur: clamp(0.35 + f.calm * 0.35 + f.liquid * 0.3 + rand() * 0.3),
+      spray: clamp(0.3 + clamp(f.comma) * 0.35 + f.plosive * 0.3 + rand() * 0.35),
+      strings: clamp(f.rhyme * 0.6 + f.repetition * 0.5 + rand() * 0.45)
+    };
+
+    function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
+    function blurred(src, k) {
+      const a = mk(OW / 4, OH / 4), b = mk(OW / k, OH / k), c = mk(OW / 4, OH / 4), o = mk(OW, OH);
+      for (const [dst, s] of [[a, src], [b, a], [c, b], [o, c]]) {
+        const x = dst.getContext('2d');
+        x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+        x.drawImage(s, 0, 0, dst.width, dst.height);
+      }
+      return o;
+    }
+    const css = (i, a) => `rgba(${P[i][0]},${P[i][1]},${P[i][2]},${a})`;
+    applyGrit();
+
+    function applyGrit() {
+      // 1. gradient wash: a broad print-like gradient over everything, sometimes as vertical strips
+      ctx.save();
+      ctx.globalCompositeOperation = pal.dark ? 'screen' : 'overlay';
+      ctx.globalAlpha = grit.wash * (pal.dark ? 0.35 : 0.45);
+      const ang = rand() * TAU, r = Math.hypot(OW, OH) / 2;
+      const lg = ctx.createLinearGradient(OW / 2 - Math.cos(ang) * r, OH / 2 - Math.sin(ang) * r, OW / 2 + Math.cos(ang) * r, OH / 2 + Math.sin(ang) * r);
+      const stops = [pickInk(), pickInk(), pickInk()];
+      stops.forEach((c, i) => lg.addColorStop(i / (stops.length - 1), css(c, 1)));
+      ctx.fillStyle = lg;
+      ctx.fillRect(0, 0, OW, OH);
+      if (rand() < 0.35 + f.meter * 0.3) {
+        const n = 5 + Math.floor(rand() * 7), w = OW / n;
+        const a = pickInk(), b = pickInk();
+        ctx.globalCompositeOperation = pal.dark ? 'screen' : 'multiply';
+        ctx.globalAlpha = 0.18 + grit.wash * 0.2;
+        for (let i = 0; i < n; i++) {
+          const g = ctx.createLinearGradient(0, -rand() * OH * 0.3, 0, OH * (1 + rand() * 0.3));
+          g.addColorStop(0, css(a, 1)); g.addColorStop(0.55, css(G, 0.2)); g.addColorStop(1, css(b, 1));
+          ctx.fillStyle = g;
+          ctx.fillRect(i * w, 0, w - 2, OH);
+        }
+      }
+      ctx.restore();
+
+      // 2. light comets: soft wedges of color, blurred into beams
+      if (grit.cones > 0) {
+        const L = mk(OW, OH), lc = L.getContext('2d');
+        for (let i = 0; i < grit.cones; i++) {
+          const x = rand() * OW, y = rand() * OH, a = rand() * TAU, len = OH * (0.2 + rand() * 0.45), w = 0.06 + rand() * 0.12;
+          const tx = x + Math.cos(a) * len, ty = y + Math.sin(a) * len;
+          const g = lc.createLinearGradient(x, y, tx, ty);
+          const c = pickInk();
+          g.addColorStop(0, css(c, 0)); g.addColorStop(0.75, css(c, 0.85)); g.addColorStop(1, css(accent, 1));
+          lc.fillStyle = g;
+          lc.beginPath();
+          lc.moveTo(x + Math.cos(a + Math.PI / 2) * len * w, y + Math.sin(a + Math.PI / 2) * len * w);
+          lc.lineTo(tx, ty);
+          lc.lineTo(x + Math.cos(a - Math.PI / 2) * len * w, y + Math.sin(a - Math.PI / 2) * len * w);
+          lc.closePath();
+          lc.fill();
+        }
+        ctx.save();
+        ctx.globalCompositeOperation = pal.dark ? 'screen' : 'source-over';
+        ctx.globalAlpha = 0.85;
+        ctx.drawImage(blurred(L, 8), 0, 0);
+        ctx.restore();
+      }
+
+      // pixel-level passes
+      const img = ctx.getImageData(0, 0, OW, OH);
+      const d = img.data;
+      const RB = OW * 4;
+
+      // 3. melt: columns drip downward from a line
+      if (grit.melt > 0.45) {
+        const src = new Uint8ClampedArray(d);
+        const y0 = Math.floor(OH * (0.1 + rand() * 0.5));
+        const xa = rand() < 0.5 ? 0 : Math.floor(rand() * OW * 0.5), xb = xa === 0 ? OW : Math.min(OW, xa + OW * (0.3 + rand() * 0.5));
+        const maxDrip = OH * (0.12 + grit.melt * 0.3);
+        const o = rand() * 100;
+        for (let x = xa; x < xb; x++) {
+          const drip = maxDrip * Math.pow(unit(fbm(noise, x * 0.004 + o, 3.7, 3) * 1.6), 2.2);
+          if (drip < 2) continue;
+          for (let y = y0; y < OH; y++) {
+            const t = clamp((y - y0) / (OH * 0.35));
+            const sy = Math.max(y0, Math.floor(y - drip * t));
+            const di = (y * OW + x) * 4, si = (sy * OW + x) * 4;
+            d[di] = src[si]; d[di + 1] = src[si + 1]; d[di + 2] = src[si + 2];
+          }
+        }
+      }
+
+      // 4. smear: motion-drag streaks in soft-edged bands (vertical when lines vary a lot)
+      const vertical = f.lineVariance > 0.6 && rand() < 0.7;
+      const bands = 1 + Math.round(grit.smear * 4);
+      for (let bnd = 0; bnd < bands; bnd++) {
+        const span = vertical ? OW : OH, len = vertical ? OH : OW;
+        const c0 = Math.floor(rand() * span), half = Math.floor(span * (0.02 + rand() * 0.08 * grit.smear));
+        const k = 0.04 + rand() * 0.12;
+        const dir = rand() < 0.5 ? 1 : -1;
+        for (let line = c0 - half; line < c0 + half; line++) {
+          if (line < 0 || line >= span) continue;
+          const edge = Math.sin(((line - (c0 - half)) / (2 * half)) * Math.PI);
+          const str = edge * (0.6 + grit.smear * 0.4);
+          const start = Math.floor(rand() * len * 0.5);
+          let r = -1, g = 0, b = 0;
+          for (let s = 0; s < len; s++) {
+            const p = dir > 0 ? s : len - 1 - s;
+            if (s < start) continue;
+            const i = vertical ? (p * OW + line) * 4 : (line * OW + p) * 4;
+            if (r < 0) { r = d[i]; g = d[i + 1]; b = d[i + 2]; }
+            r += (d[i] - r) * k; g += (d[i + 1] - g) * k; b += (d[i + 2] - b) * k;
+            d[i] += (r - d[i]) * str; d[i + 1] += (g - d[i + 1]) * str; d[i + 2] += (b - d[i + 2]) * str;
+          }
+        }
+      }
+      // short pixel-sort runs by brightness: the gritty glitch streak
+      const sorts = Math.round(grit.smear * 4 + f.energy * 4);
+      for (let n = 0; n < sorts; n++) {
+        const y0 = Math.floor(rand() * OH), h = 2 + Math.floor(rand() * 40), x0 = Math.floor(rand() * OW * 0.7), w = Math.floor(OW * (0.1 + rand() * 0.3));
+        for (let y = y0; y < Math.min(OH, y0 + h); y++) {
+          const row = [];
+          for (let x = x0; x < Math.min(OW, x0 + w); x++) { const i = y * RB + x * 4; row.push([d[i], d[i + 1], d[i + 2]]); }
+          row.sort((p, q) => (p[0] + p[1] + p[2]) - (q[0] + q[1] + q[2]));
+          row.forEach((c, j) => { const i = y * RB + (x0 + j) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; });
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+
+      // 5. focus blur: a sharp band, the rest drifts out of focus; plus a few smudges
+      const soft = blurred(out, 16 + Math.round(grit.blur * 16));
+      const mask = mk(OW, OH), mc = mask.getContext('2d');
+      mc.drawImage(soft, 0, 0);
+      mc.globalCompositeOperation = 'destination-in';
+      const fy = OH * (0.3 + rand() * 0.4), fw = 0.18 + (1 - grit.blur) * 0.2;
+      const mg = mc.createLinearGradient(0, 0, 0, OH);
+      mg.addColorStop(0, 'rgba(0,0,0,1)');
+      mg.addColorStop(clamp(fy / OH - fw), 'rgba(0,0,0,0)');
+      mg.addColorStop(clamp(fy / OH + fw), 'rgba(0,0,0,0)');
+      mg.addColorStop(1, 'rgba(0,0,0,1)');
+      mc.fillStyle = mg;
+      mc.fillRect(0, 0, OW, OH);
+      ctx.save();
+      ctx.globalAlpha = 0.25 + grit.blur * 0.45;
+      ctx.drawImage(mask, 0, 0);
+      ctx.restore();
+      const smudges = 1 + Math.round(grit.blur * 3);
+      for (let i = 0; i < smudges; i++) {
+        const sm = mk(OW, OH), sc = sm.getContext('2d');
+        const x = rand() * OW, y = rand() * OH, rr = OH * (0.08 + rand() * 0.25);
+        sc.drawImage(soft, (rand() - 0.5) * 80, (rand() - 0.5) * 40);
+        sc.globalCompositeOperation = 'destination-in';
+        const rg = sc.createRadialGradient(x, y, 0, x, y, rr);
+        rg.addColorStop(0, 'rgba(0,0,0,0.95)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+        sc.fillStyle = rg;
+        sc.save(); sc.translate(x, y); sc.scale(1.8, 1); sc.translate(-x, -y);
+        sc.fillRect(0, 0, OW, OH); sc.restore();
+        ctx.drawImage(sm, 0, 0);
+      }
+
+      // 6. bloom
+      ctx.save();
+      ctx.globalCompositeOperation = pal.dark ? 'screen' : 'soft-light';
+      ctx.globalAlpha = pal.dark ? 0.35 : 0.5;
+      ctx.drawImage(blurred(out, 32), 0, 0);
+      ctx.restore();
+
+      // 7. spray: stippled clouds of single pixels following a noise field
+      const dots = Math.round(grit.spray * 40000);
+      const so = rand() * 100, sscale = 0.0012 + rand() * 0.002;
+      const sprayCols = [accent, contrast, pickInk()];
+      for (let i = 0, tries = 0; i < dots && tries < dots * 6; tries++) {
+        const x = rand() * OW, y = rand() * OH;
+        const v = unit(fbm(noise, x * sscale + so, y * sscale * 1.6, 4) * 1.6);
+        if (v * v * v * v < rand()) continue;
+        i++;
+        ctx.fillStyle = css(sprayCols[i % 3 === 0 ? 1 : (i % 7 === 0 ? 2 : 0)], 0.55 + rand() * 0.45);
+        const s = rand() < 0.85 ? 2 : 4;
+        ctx.fillRect(x | 0, y | 0, s, s);
+      }
+
+      // 8. string lines: fans of hairlines from a few anchors to a grid of nodes, one node per line of the poem
+      if (grit.strings > 0.35) {
+        const anchors = Array.from({ length: 2 + Math.floor(rand() * 4) }, () => ({ x: rand() < 0.5 ? rand() * OW * 0.2 : OW * (0.8 + rand() * 0.2), y: rand() * OH }));
+        const nl = Math.min(64, Math.max(12, lines.length * 3));
+        const cols = Math.ceil(Math.sqrt(nl * 1.6)), rows = Math.ceil(nl / cols);
+        const gx = OW * (0.2 + rand() * 0.2), gy = OH * (0.15 + rand() * 0.1), gw = OW * (0.35 + rand() * 0.25), gh = OH * (0.5 + rand() * 0.25);
+        ctx.save();
+        ctx.strokeStyle = css(contrast, 0.12 + grit.strings * 0.12);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const nodesFull = [];
+        for (let i = 0; i < nl; i++) nodesFull.push({ x: gx + (gw * (i % cols)) / Math.max(1, cols - 1), y: gy + (gh * Math.floor(i / cols)) / Math.max(1, rows - 1) });
+        for (const a of anchors) for (const n of nodesFull) { if (rand() < 0.75) { ctx.moveTo(a.x, a.y); ctx.lineTo(n.x, n.y); } }
+        ctx.stroke();
+        ctx.fillStyle = css(contrast, 0.9);
+        nodesFull.forEach((n) => ctx.fillRect(n.x - 2, n.y - 2, 4, 4));
+        ctx.restore();
+      }
+    }
+
     /* ===== post: glitch rows, RGB split, stitch, scanlines, grain ===== */
     const fin = ctx.getImageData(0, 0, OW, OH);
     const q = fin.data;
@@ -573,7 +779,7 @@
     }
 
     const cell = OW / W0;
-    const grain = 16 + Math.round((f.plosive + f.caps) * 10) + (pal.dark ? 6 : 0);
+    const grain = 24 + Math.round((f.plosive + f.caps) * 10) + (pal.dark ? 6 : 0);
     let s = seed | 1;
     for (let y = 0; y < OH; y++) {
       const scan = pal.dark && y % 3 === 0 ? 0.88 : 1;
@@ -594,6 +800,6 @@
     }
     ctx.putImageData(fin, 0, 0);
 
-    return { canvas: out, scene, palette: pal.name, pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
+    return { canvas: out, scene, grit, palette: pal.name, pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
   };
 })((window.Conjure = window.Conjure || {}));

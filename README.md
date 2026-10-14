@@ -22,7 +22,7 @@ Then in Vercel: **Add New → Project → Import** the repo. Framework preset: *
 
 ## How a poem becomes a picture
 
-`js/analyze.js` measures the poem (sound, rhythm, rhyme, punctuation, feeling, imagery). `js/render.js` uses those numbers to pick a **scene**, a **palette** and a **pixel size**, paints into a low-res buffer, dithers it into a few colors, lays fine 1-px lines on top, scales it up crisp to 1920×1080 and adds grain, RGB split and glitch rows.
+`js/analyze.js` measures the poem (sound, rhythm, rhyme, punctuation, feeling, imagery). `js/render.js` uses those numbers to pick a **scene**, a **palette** and a **pixel size**, paints into a low-res buffer, dithers it into a few colors, lays fine 1-px lines on top, scales it up crisp to 1920×1080, then runs a grit stage: a print-style gradient wash, blurred light comets, melting drips, smeared and pixel-sorted streaks, a focus band with the rest drifting out of focus, smudges, bloom, stippled spray clouds and string-art hairlines. Grain, RGB split and glitch rows finish it.
 
 | Scene | Leans toward it |
 |---|---|
@@ -32,7 +32,7 @@ Then in Vercel: **Add New → Project → Import** the repo. Framework preset: *
 | Skyline: dithered voxel landscape over a lake | earth, water, calm |
 | Knit: a hand-dithered color field with a band of line-blocks | feeling words, liquid sounds, love, body |
 
-Other mappings: hard consonants make bigger pixels, soft ones finer; dashes and energy draw zigzag lines; rhymes become a network of threads; questions draw thin rings; commas scatter dust; "I" becomes a slatted sun; "you" a dashed orbit.
+Other mappings: hard consonants make bigger pixels, soft ones finer; dashes and energy draw zigzag lines; rhymes become a network of threads; questions draw thin rings; commas scatter dust; "I" becomes a slatted sun; "you" a dashed orbit. Negative feeling, fire and night melt the picture; flowing lines and s-sounds smear it; calm, liquid sounds blur it; commas and hard consonants thicken the spray; rhyme and repetition draw the string fans.
 
 Every conjuring is one of a kind: the seed mixes the poem with a random value. The poem is cleared from the page on submit and is never stored or sent anywhere.
 
