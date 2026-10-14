@@ -8,7 +8,7 @@ const fonts = html.match(/<link rel="stylesheet" href="https:\/\/fonts[^>]+>/)[0
 const scripts = ['utils', 'analyze', 'render', 'main']
   .map((n) => `<script>\n${readFileSync(`js/${n}.js`, 'utf8')}\n</script>`).join('\n');
 const page = body.replace(/<!--SCRIPTS-->[\s\S]*<!--\/SCRIPTS-->/,
-  `<script>window.CONJURE_PREVIEW = true;</script>\n${scripts}`);
+  `${scripts}`);
 mkdirSync('dist', { recursive: true });
 writeFileSync('dist/preview.html', `<title>Conjure</title>\n${fonts}\n<style>\n${css}\n</style>\n${page}`);
 console.log('dist/preview.html written');

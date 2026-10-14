@@ -107,7 +107,10 @@
       const endMatch = t.match(/([.,;:!?…—–-]+)["'”’)\]]*\s*$/);
       const endPunct = endMatch ? endMatch[1] : '';
       lineInfo.push({
-        text: t, words: lw.length, syl: lw.reduce((s, w) => s + syllables(w), 0),
+        words: lw.length,
+        wordLens: lw.map((w) => w.length),
+        wordCodes: lw.map((w) => C.seed32(w) & 0xffff),
+        wordStops: lw.map((w) => STOP.has(w) || w.length < 3), syl: lw.reduce((s, w) => s + syllables(w), 0),
         sound, endPunct, rhymeKey: rhymeKey(lw[lw.length - 1]), stanza, idxInStanza: idxInStanza++
       });
     }
@@ -202,14 +205,6 @@
     const other = pron(['you', 'your', 'yours', 'thee', 'thou', 'thy', 'thine']);
     const collective = pron(['we', 'us', 'our', 'ours']);
 
-    // keyword
-    let keyword = '', best = -1;
-    for (const w of uniqueContent) {
-      let score = Math.pow(freq.get(w), 1.6) * Math.min(w.length, 9);
-      for (const k in THEME_SETS) if (THEME_SETS[k].has(w)) score *= 1.4;
-      if (score > best) { best = score; keyword = w; }
-    }
-
     // composite moods
     const energy = clamp(0.4 * clamp(exclaim * 2.5) + 0.35 * plosive + 0.15 * clamp(1 - avgLineWords / 12) + 0.1 * clamp(dash * 2));
     const calm = clamp(0.35 * sibilant + 0.25 * liquid + 0.25 * meter + 0.15 * clamp(avgLineWords / 10));
@@ -223,7 +218,7 @@
       exclaim, question, comma, dash, ellipsis, caps,
       diversity, repetition, alliteration, rhyme, rhymePairs,
       sentiment, intensity, themes, themeCounts, dominantTheme, colors,
-      self, other, collective, keyword,
+      self, other, collective,
       energy, calm, openness
     };
   };

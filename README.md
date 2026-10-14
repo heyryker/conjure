@@ -2,7 +2,7 @@
 
 Write a poem. Conjure reads its sound, rhythm, rhyme and mood, then paints a 16:9 picture of it.
 
-Plain HTML, CSS and canvas. No framework, no build step, no server. The same poem always makes the same picture, because every piece is seeded by its words.
+Plain HTML, CSS and canvas. No framework, no build step, no server.
 
 ## Run it locally
 
@@ -22,46 +22,29 @@ Then in Vercel: **Add New → Project → Import** the repo. Framework preset: *
 
 ## How a poem becomes a picture
 
-`js/analyze.js` measures the poem. `js/render.js` paints it in layers. Each factor steers one thing:
+`js/analyze.js` measures the poem (sound, rhythm, rhyme, punctuation, feeling, imagery). `js/render.js` uses those numbers to pick a **scene**, a **palette** and a **pixel size**, paints into a low-res buffer, dithers it into a few colors, lays fine 1-px lines on top, scales it up crisp to 1920×1080 and adds grain, RGB split and glitch rows.
 
-| Factor | Measured from | Drives |
-|---|---|---|
-| Imagery (water, fire, earth, air, night, body, time, love) | theme word lists | composition mode, flow direction, base hue |
-| Sentiment | positive / negative lexicon | warm vs. cool palette, night ground |
-| Intensity | share of feeling words | saturation, color-field strength |
-| Color words | "red", "sea", "gold"… | palette anchors |
-| Plosives (p b t d k g) | letter share vs. English baseline | shard shapes, grain |
-| Liquids (l r) | " | blob shapes |
-| Sibilants (s z sh) | " | ribbon shapes, smoother flow |
-| Nasals (m n) | " | ring shapes |
-| Vowel light | vowel share | ink lightness |
-| Alliteration | adjacent words sharing a first sound | riso-style print offset |
-| Meter | syllable regularity across lines | grid layout, angle snapping |
-| Line variance | spread of line lengths | tilt and rotation |
-| Line length | words per line | flow stroke length |
-| Stanzas | blank-line groups | strata bands, color fields |
-| Enjambment | lines without end punctuation | open outlines vs. filled shapes |
-| Rhyme (exact + slant) | end-word sounds | threads between lines, mirror symmetry |
-| Repetition | repeated content words | halftone dot echo |
-| Energy | `!`, plosives, short lines, dashes | flow turbulence, complementary palette |
-| Openness | `?`, `…`, dashes | open arcs, triadic palette |
-| "I" / "you" | pronoun share | a sun, a ring, a tether between them |
-| Keyword | most repeated, weightiest word | huge ghost type |
-| Line endings `? ! , . ; — …` | last character of each line | arcs, rays, trailing dots, punches |
+| Scene | Leans toward it |
+|---|---|
+| Poster: each stanza a region of moiré, contour noise, waves, blocks or rain | stanzas, rhyme, regular meter |
+| Columns: one neon column per line, one block per word | energy, `!`, night imagery |
+| Tiles: one tile per word, content words get richer motifs | repetition, meter, long poems |
+| Skyline: dithered voxel landscape over a lake | earth, water, calm |
+| Knit: a hand-dithered color field with a band of line-blocks | feeling words, liquid sounds, love, body |
 
-Composition modes: Tide, Kiln, Strata, Drift, Nocturne, Pulse, Clockwork, Bloom, and Measure or Murmur when no imagery dominates.
+Other mappings: hard consonants make bigger pixels, soft ones finer; dashes and energy draw zigzag lines; rhymes become a network of threads; questions draw thin rings; commas scatter dust; "I" becomes a slatted sun; "you" a dashed orbit.
+
+Every conjuring is one of a kind: the seed mixes the poem with a random value. The poem is cleared from the page on submit and is never stored or sent anywhere.
 
 ## Files
 
 ```
 index.html            page
-css/style.css         notebook + gallery styles
+css/style.css         writing card + full-bleed view
 js/utils.js           hash, seeded random, simplex noise, OKLCH color
 js/analyze.js         poem -> factors
-js/render.js          factors -> 1920×1080 canvas, in layers
-js/main.js            UI, reading panel, share links, PNG download
+js/render.js          factors -> pixel scenes -> 1920×1080 canvas
+js/main.js            writing card, reveal, back, PNG download
 assets/               logo
 scripts/build-preview.mjs   optional single-file build for sharing a preview
 ```
-
-Share links encode the poem in the URL (`?p=…&v=…`), so anyone opening one gets the same picture.

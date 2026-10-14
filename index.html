@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Conjure</title>
-<meta name="description" content="Write a poem. Conjure reads its sound, rhythm, rhyme and mood, then paints it.">
+<meta name="description" content="Write a poem. Conjure turns it into a picture, then lets the words go.">
 <link rel="icon" href="assets/conjure-logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Martian+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <!--BODY-->
-<div class="page">
-  <header class="masthead">
+<main id="write" class="write">
+  <div class="stack">
     <svg class="logo" role="img" aria-label="Conjure" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 365.04">
       <path d="M149.07,265.45c-9.21,5.92-21.71,12.5-37.5,12.5-46.71,0-75.66-42.1-75.66-104.93s28.29-109.87,75.33-109.87c15.13,0,24.01,4.61,32.89,10.53l14.14-5.92,2.3,58.88h-4.6l-15.79-47.37c-6.91-6.58-15.46-10.85-28.62-10.85-36.18,0-53.62,42.43-53.62,101.64s17.43,102.63,53.29,102.63c20.72,0,33.55-15.79,40.46-35.53l7.89-23.03h5.26l-8.22,50.99-7.57.33Z"/>
       <path d="M168.31,171.37c0-58.55,31.91-108.22,72.04-108.22,43.09,0,72.7,43.09,72.7,106.58,0,58.55-31.58,108.22-71.71,108.22-43.42,0-73.02-43.09-73.02-106.58ZM291.01,170.72c0-62.17-22.04-102.3-50.66-102.3s-50,39.14-50,101.97,21.71,102.3,51.31,102.3,49.34-39.14,49.34-101.97Z"/>
@@ -22,78 +22,46 @@
       <path d="M802.38,273.35l.99-4.61,11.51-1.32c6.58-.66,8.22-1.97,8.22-4.28V77.95c0-2.3-1.64-3.62-8.22-4.28l-11.51-1.32-.99-4.61h111.18l3.95,53.62h-4.61l-2.96-14.14c-5.26-25.33-15.46-33.55-42.43-33.55h-24.67v88.81h16.45c19.74,0,26.97-4.28,29.93-18.75l1.97-9.54,4.28.33-4.61,62.83-4.28-.33-.66-8.88c-1.32-16.45-6.58-20.06-27.96-20.06h-15.13v98.35l19.41.99c33.88,1.64,48.03-11.51,54.27-40.46l2.3-10.53,5.26.33-9.54,56.58h-112.17Z"/>
       <path d="M647.53,43.19c-6.91,3.62-25,12.83-42.43,29.93-14.8,14.47-41.12,46.05-67.1,92.76,3.95-.33,7.57-.47,10.2-.66,4.6-.33,12.02-.99,14.65-.33l-4.45,5.59c-7.17-1.28-10.2-.66-23.36.66-3.62,6.91-7.56,14.14-11.18,21.71-29.93,61.84-44.08,96.38-84.54,124.34-11.51,7.9-24.01,11.51-36.18,11.51-15.79,0-30.26-6.25-39.47-19.08-5.26-7.57-7.89-16.45-7.89-25.99,0-20.07,11.18-42.43,32.24-59.21,38.49-30.92,88.81-48.68,123.35-54.93,2.3-.33,4.27-.66,6.25-.99,3.29-4.93,6.91-9.87,10.53-14.8-10.53,10.2-24.01,16.78-37.5,16.78-6.25,0-12.17-1.32-18.09-4.28-12.83-6.25-20.39-20.39-20.39-37.83,0-14.8,5.59-31.91,17.76-48.35,26.97-35.85,69.41-42.43,86.84-42.1,21.38.33,40.79,8.88,55.26,8.22,14.8-.99,25.99-6.25,32.9-9.21M502.8,176.74c-33.22,7.56-82.56,26.31-115.13,55.92-19.41,17.76-25.99,36.18-25.99,50,0,9.54,3.29,17.1,7.24,20.72,3.95,3.29,9.54,6.25,17.11,6.25,12.83,0,31.58-8.22,58.22-36.84,27.3-29.28,43.42-59.87,69.41-98.35-3.29.66-6.91,1.32-10.85,2.3ZM617.27,51.09c-1.97,0-8.22.66-20.07-1.32-11.84-1.64-29.27-7.24-42.76-6.91-16.78.33-50.99,11.18-75,43.09-12.83,16.78-18.75,33.88-18.75,47.7,0,12.5,4.6,22.37,13.49,26.97,5.26,2.96,11.18,4.28,16.78,4.28,15.13,0,30.59-9.54,40.13-24.34,7.9-11.84,10.2-21.71,10.2-29.93,0-5.59-1.32-10.2-2.3-13.82l3.62-1.32c.99,1.97,2.63,8.88,2.63,17.43,0,7.56-.99,16.12-5.26,24.67,6.58-8.55,13.81-17.43,21.71-26.97,29.27-34.21,55.26-55.59,57.23-57.56l-1.64-1.97Z"/>
       <g>
-        <path d="M585.67,81.11v-3.49c0-2.96.99-4.28,7.9-4.6l.26-.02c1.91-1.86,3.74-3.61,5.46-5.25h-54.08l.99,4.61,11.19.66c7.24.33,8.55,1.64,8.55,4.6v24.61c6.96-7.85,13.63-14.92,19.74-21.12Z"/>
-        <path d="M605.41,67.76h-2.76c-1.66,1.56-3.43,3.25-5.29,5.03l7.06-.43.99-4.61Z"/>
-        <path d="M585.67,84.41c-6.14,6.29-12.82,13.42-19.74,21.31v15.27c6.99-10.04,13.66-18.81,19.74-26.26v-10.32Z"/>
-        <path d="M642.25,67.76l.99,4.61,10.85.66c11.51.66,13.49,3.62,13.49,9.54v120.72c0,30.92-8.22,63.49-41.78,63.49s-40.13-30.59-40.13-63.49v-104.91c-5.85,7.26-12.53,16.11-19.74,26.62v77.96c0,42.43,10.2,75,52.96,75s54.93-32.56,54.93-75v-120.06c0-5.92.99-9.21,11.19-9.87l8.55-.66.99-4.61h-52.3Z"/>
+      <path d="M585.67,81.11v-3.49c0-2.96.99-4.28,7.9-4.6l.26-.02c1.91-1.86,3.74-3.61,5.46-5.25h-54.08l.99,4.61,11.19.66c7.24.33,8.55,1.64,8.55,4.6v24.61c6.96-7.85,13.63-14.92,19.74-21.12Z"/>
+      <path d="M605.41,67.76h-2.76c-1.66,1.56-3.43,3.25-5.29,5.03l7.06-.43.99-4.61Z"/>
+      <path d="M585.67,84.41c-6.14,6.29-12.82,13.42-19.74,21.31v15.27c6.99-10.04,13.66-18.81,19.74-26.26v-10.32Z"/>
+      <path d="M642.25,67.76l.99,4.61,10.85.66c11.51.66,13.49,3.62,13.49,9.54v120.72c0,30.92-8.22,63.49-41.78,63.49s-40.13-30.59-40.13-63.49v-104.91c-5.85,7.26-12.53,16.11-19.74,26.62v77.96c0,42.43,10.2,75,52.96,75s54.93-32.56,54.93-75v-120.06c0-5.92.99-9.21,11.19-9.87l8.55-.66.99-4.61h-52.3Z"/>
       </g>
       <g>
-        <path d="M437.47,199.98c2-.97,4-1.92,6-2.84v-6.08c-2,.9-4.01,1.84-6.01,2.79v6.12Z"/>
-        <path d="M443.47,273.62c-.33.35-.66.7-.98,1.04h.98v-1.04Z"/>
-        <path d="M435.25,274.66h4.06c1.08-1.12,2.17-2.26,3.26-3.44.31-.33.6-.66.91-.99v-70.6c-2,.93-4,1.88-5.99,2.87l.07,33.68h-1.32l-13.39-25.88c-5.51,3.17-10.88,6.56-16.04,10.15l28.44,54.21Z"/>
-        <path d="M318.47,268.41l-5.92.33-.99,4.61h42.8c.29-1.67.66-3.34,1.08-5.01-12.17-.78-15.6-3.75-15.6-10.12l-.33-163.48h1.32l61.18,116.6c5.28-3.55,10.68-6.89,16.17-10.01l-69.13-133.56h-39.47l.99,4.28,2.96.33c9.87,1.97,15.79,5.26,20.06,11.18v174.67c0,6.58-3.29,9.54-15.13,10.2Z"/>
-        <path d="M420.44,72.69c13.16.66,16.78,3.62,16.78,10.2l.23,108.43c2.01-.95,4.01-1.88,6.02-2.77v-105.66c0-6.58,3.29-9.54,15.13-10.2l5.92-.33.99-4.61h-51.97l.99,4.61,5.92.33Z"/>
-        <path d="M363.08,271.23l-.53-2.49-4.76-.26c-.43,1.63-.78,3.25-1.08,4.87h5.91c.14-.7.29-1.4.46-2.11Z"/>
-        <path d="M405.73,218.41c5.17-3.58,10.55-6.96,16.06-10.13l-2.55-4.93c-5.49,3.12-10.9,6.45-16.17,10l2.65,5.05Z"/>
+      <path d="M437.47,199.98c2-.97,4-1.92,6-2.84v-6.08c-2,.9-4.01,1.84-6.01,2.79v6.12Z"/>
+      <path d="M443.47,273.62c-.33.35-.66.7-.98,1.04h.98v-1.04Z"/>
+      <path d="M435.25,274.66h4.06c1.08-1.12,2.17-2.26,3.26-3.44.31-.33.6-.66.91-.99v-70.6c-2,.93-4,1.88-5.99,2.87l.07,33.68h-1.32l-13.39-25.88c-5.51,3.17-10.88,6.56-16.04,10.15l28.44,54.21Z"/>
+      <path d="M318.47,268.41l-5.92.33-.99,4.61h42.8c.29-1.67.66-3.34,1.08-5.01-12.17-.78-15.6-3.75-15.6-10.12l-.33-163.48h1.32l61.18,116.6c5.28-3.55,10.68-6.89,16.17-10.01l-69.13-133.56h-39.47l.99,4.28,2.96.33c9.87,1.97,15.79,5.26,20.06,11.18v174.67c0,6.58-3.29,9.54-15.13,10.2Z"/>
+      <path d="M420.44,72.69c13.16.66,16.78,3.62,16.78,10.2l.23,108.43c2.01-.95,4.01-1.88,6.02-2.77v-105.66c0-6.58,3.29-9.54,15.13-10.2l5.92-.33.99-4.61h-51.97l.99,4.61,5.92.33Z"/>
+      <path d="M363.08,271.23l-.53-2.49-4.76-.26c-.43,1.63-.78,3.25-1.08,4.87h5.91c.14-.7.29-1.4.46-2.11Z"/>
+      <path d="M405.73,218.41c5.17-3.58,10.55-6.96,16.06-10.13l-2.55-4.93c-5.49,3.12-10.9,6.45-16.17,10l2.65,5.05Z"/>
       </g>
       <path d="M542.99,96.73c-1.22-3.93-1.86-9.33-1.86-9.33l-18.83,5.85,1.44,2.57,3.6-.9c7.98-2.05,10.69-.95,11.91,2.98"/>
       <path d="M553.37,165.88c4.12,0,9.47-.98,9.47-.98l-.03,19.72-2.88-.62-.2-3.7c-.4-8.23-2.25-10.5-6.36-10.5"/>
-    </svg>
-    <p class="tagline">Write a poem. Conjure reads its sound, rhythm, rhyme and mood, then paints it.</p>
-  </header>
+      </svg>
+    <form id="form" class="card" autocomplete="off">
+      <label class="sr-only" for="poem">Your poem</label>
+      <textarea id="poem" class="poem" placeholder="Start writing" spellcheck="true"></textarea>
+      <button id="submit" class="submit" type="submit" disabled>Conjure</button>
+    </form>
+    <p class="note">Your poem isn’t saved. It disappears the moment the picture appears.</p>
+  </div>
+</main>
 
-  <main class="studio">
-    <section class="notebook" aria-label="Your poem">
-      <div class="sheet">
-        <label class="sr-only" for="poem-title">Title</label>
-        <input id="poem-title" class="title-input" type="text" placeholder="Untitled" autocomplete="off" spellcheck="false">
-        <label class="sr-only" for="poem">Poem</label>
-        <textarea id="poem" class="poem-input" rows="14" spellcheck="true" placeholder="Begin anywhere. A line, a stanza, a whole poem."></textarea>
-      </div>
-      <div class="controls">
-        <button id="conjure" class="btn btn-primary" type="button">Conjure</button>
-        <button id="variation" class="btn" type="button" title="Same poem, different seed">Another variation</button>
-        <button id="clear" class="btn btn-quiet" type="button">Clear page</button>
-        <span class="kbd-hint"><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
-      </div>
-      <div class="samples">
-        <span class="label">Try a poem</span>
-        <button type="button" data-sample="dickinson">Dickinson</button>
-        <button type="button" data-sample="blake">Blake</button>
-        <button type="button" data-sample="teasdale">Teasdale</button>
-        <button type="button" data-sample="rossetti">Rossetti</button>
-      </div>
-    </section>
-
-    <section class="gallery" aria-label="Your picture">
-      <div id="frame" class="frame">
-        <canvas id="art" role="img" aria-label="Generated artwork for your poem"></canvas>
-      </div>
-      <div class="caption">
-        <div class="caption-id">
-          <span id="mode-name" class="mode">—</span>
-          <span id="serial" class="serial"></span>
-        </div>
-        <span id="status" class="status" role="status" aria-live="polite">Preparing the page…</span>
-        <div class="caption-actions">
-          <button id="share" class="btn btn-quiet" type="button">Copy link</button>
-          <button id="download" class="btn" type="button">Download PNG</button>
-        </div>
-      </div>
-
-      <div class="reading-wrap">
-        <h2 class="reading-title">The reading</h2>
-        <p class="reading-note">Every factor below was measured from your words and steers one part of the picture. Change a comma and the picture changes.</p>
-        <div id="reading" class="reading"></div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="colophon">
-    <span>Same poem, same picture. Every piece is seeded by its words.</span>
-    <span>1920 × 1080 · canvas</span>
-  </footer>
-</div>
+<section id="view" class="view" hidden aria-label="Your picture">
+  <canvas id="art" class="art" role="img" aria-label="A generated picture of your poem"></canvas>
+  <div class="bar">
+    <button id="back" class="pill" type="button">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Back
+    </button>
+    <button id="download" class="pill pill-dark" type="button">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8m0 0L4.5 7M8 10.5 11.5 7M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Download
+    </button>
+  </div>
+  <p id="toast" class="toast" role="status" aria-live="polite"></p>
+</section>
 <!--SCRIPTS-->
 <script src="js/utils.js"></script>
 <script src="js/analyze.js"></script>

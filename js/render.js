@@ -1,546 +1,599 @@
-/* Conjure — turns a reading into a 1920×1080 painting.
-   C.plan(ctx, features, seed) returns { mode, palette, steps }.
-   Each step paints one layer; main.js runs them one frame apart so the piece builds up. */
+/* Conjure — pixel renderer.
+   A poem picks a scene, a palette and a pixel size. The scene is painted into a
+   low-res index buffer, dithered into a few vibrant colors, overlaid with fine
+   1-px "instrument" lines, scaled up crisp to 1920×1080, then given grain,
+   RGB split and glitch rows.  C.paint(features, seed) -> { canvas, scene, palette, serial } */
 (function (C) {
   'use strict';
+  const OW = 1920, OH = 1080;   // output
+  const AW = 960, AH = 540;     // accent grid (2 output px per accent px)
   const TAU = Math.PI * 2;
-  const W = 1920, H = 1080;
-  const { clamp, lerp, rgba } = C;
-  C.W = W; C.H = H;
+  const clamp = C.clamp;
+  C.W = OW; C.H = OH;
 
-  const MODES = {
-    water: { name: 'Tide', hue: 215 },
-    fire: { name: 'Kiln', hue: 32 },
-    earth: { name: 'Strata', hue: 105 },
-    air: { name: 'Drift', hue: 195 },
-    night: { name: 'Nocturne', hue: 265 },
-    body: { name: 'Pulse', hue: 8 },
-    time: { name: 'Clockwork', hue: 70 },
-    love: { name: 'Bloom', hue: 345 },
-    measure: { name: 'Measure', hue: null },
-    murmur: { name: 'Murmur', hue: null }
-  };
-  C.MODES = MODES;
-
-  function pickMode(f) {
-    if (f.dominantTheme) return f.dominantTheme;
-    return f.meter > 0.62 ? 'measure' : 'murmur';
-  }
-
-  /* ---------- palette ---------- */
-  function buildPalette(f, rand, modeKey) {
-    let vx = 0, vy = 0, tw = 0;
-    for (const k in f.themes) {
-      const w = f.themes[k];
-      if (w > 0 && MODES[k]) { const h = (MODES[k].hue * Math.PI) / 180; vx += Math.cos(h) * w; vy += Math.sin(h) * w; tw += w; }
+  /* ---------- ordered dither matrix (8×8 Bayer, values in [0,1)) ---------- */
+  const BAYER = (() => {
+    let b = [[0, 2], [3, 1]];
+    for (let n = 2; n < 8; n *= 2) {
+      const nb = [];
+      for (let y = 0; y < n * 2; y++) {
+        nb.push([]);
+        for (let x = 0; x < n * 2; x++) {
+          nb[y].push(b[y % n][x % n] * 4 + [[0, 2], [3, 1]][Math.floor(y / n)][Math.floor(x / n)]);
+        }
+      }
+      b = nb;
     }
-    let hue = tw > 0 ? ((Math.atan2(vy, vx) * 180) / Math.PI + 360) % 360 : rand() * 360;
-    if (f.sentiment !== 0) hue = C.mixHue(hue, f.sentiment > 0 ? 55 : 255, Math.abs(f.sentiment) * 0.35);
-    if (f.colors.length) hue = C.mixHue(hue, f.colors[0].lch[2], 0.55);
-    hue = (hue + (rand() - 0.5) * 24 + 360) % 360;
+    return b.map((r) => r.map((v) => (v + 0.5) / 64));
+  })();
+  const bayer = (x, y) => BAYER[y & 7][x & 7];
 
-    const dark = f.themes.night > 0.12 || f.sentiment < -0.2 || modeKey === 'night' || rand() < 0.28;
-    const chroma = Math.min(0.24, 0.09 + f.energy * 0.11 + f.intensity * 0.05);
+  /* ---------- palettes: first color is the ground ---------- */
+  const PALETTES = [
+    { name: 'Periwinkle', c: ['#7f83f2', '#5c0e2e', '#ff8ad8', '#e8e6ff'], tags: { air: 1, water: 0.5, time: 0.3 }, sky: 1 },
+    { name: 'Sage', c: ['#d8dfa3', '#ff6fd2', '#5c0e2e', '#7f83f2'], tags: { earth: 1, love: 0.7 } },
+    { name: 'Blaze', c: ['#ff5717', '#58102b', '#ffb199', '#ffe14a'], tags: { fire: 1, body: 0.6 } },
+    { name: 'Neon', c: ['#060608', '#00e7ff', '#ff1fc7', '#ffe81a', '#13d66b', '#ff4a1c'], tags: { night: 1, fire: 0.4 }, dark: 1, energy: 1 },
+    { name: 'Knit', c: ['#2a5bd7', '#3fd17a', '#ffe04a', '#ff5d78'], tags: { water: 0.7, time: 0.6, earth: 0.4 } },
+    { name: 'Pop', c: ['#ffffff', '#1aa1ff', '#ff2b8c', '#ffe500', '#121212', '#ff7b57'], tags: { time: 0.8, love: 0.4 }, energy: 0.6 },
+    { name: 'Dusk', c: ['#cfc6b4', '#ff4f6e', '#3c7aa6', '#ece36a'], tags: { body: 0.8, water: 0.7, earth: 0.5 }, sky: 1 },
+    { name: 'Acid', c: ['#0d0d10', '#c8ff00', '#ff3ea5', '#6c5cff'], tags: { night: 0.7, fire: 0.3 }, dark: 1, energy: 0.9 },
+    { name: 'Lagoon', c: ['#06283a', '#16e0c6', '#ff8a3d', '#f2efe0'], tags: { water: 1, night: 0.4 }, dark: 1, sky: 0.5 },
+    { name: 'Bubblegum', c: ['#ffd3ea', '#1f1ad8', '#ff5a36', '#7be0ff'], tags: { love: 1, air: 0.6 }, sky: 0.6 },
+    { name: 'Mint', c: ['#b9f6d9', '#2b1a90', '#ff4fa1', '#ffe14a'], tags: { earth: 0.7, air: 0.5 }, sky: 0.6 },
+    { name: 'Ultraviolet', c: ['#18063a', '#ff4fd9', '#40f0ff', '#fff46a'], tags: { night: 1, love: 0.4 }, dark: 1, sky: 0.5 }
+  ];
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const sat = (c) => Math.max(...c) - Math.min(...c);
 
-    let scheme, offs;
-    if (f.repetition > 0.35 || f.meter > 0.8) { scheme = 'Analogous'; offs = [0, 28, -28, 56, -14]; }
-    else if (f.energy > 0.5) { scheme = 'Complementary'; offs = [0, 180, 24, 204, -18]; }
-    else if (f.openness > 0.35) { scheme = 'Triadic'; offs = [0, 120, 240, 60, 180]; }
-    else { scheme = 'Split'; offs = [0, 150, 210, 30, -30]; }
-
-    const bright = f.vowelBright;
-    const inks = offs.map((o, i) => {
-      const h = (hue + o + (rand() - 0.5) * 16 + 360) % 360;
-      const Lv = dark ? 0.6 + bright * 0.15 + rand() * 0.15 : 0.45 + bright * 0.12 + rand() * 0.2;
-      const Cv = chroma * (0.75 + rand() * 0.45) * (i === 4 ? 0.6 : 1);
-      return { lch: [Lv, Cv, h] };
-    });
-    f.colors.slice(0, 2).forEach((c, i) => { inks[i * 2 + 1] = { lch: c.lch.slice(), word: c.word }; });
-    inks.forEach((k) => { k.rgb = C.oklch(...k.lch); });
-
-    const bgHue = rand() < 0.5 ? hue : (hue + 180) % 360;
-    const bgL = dark ? 0.15 + rand() * 0.05 : 0.94 + rand() * 0.03;
-    const bg = C.oklch(bgL, dark ? 0.03 : 0.018, bgHue);
-    const deep = C.oklch(dark ? 0.92 : 0.22, 0.03, hue); // contrast ink for punctuation marks
-    const accent = inks.slice().sort((a, b) => b.lch[1] - a.lch[1])[0].rgb;
-    return { hue, dark, scheme, inks: inks.map((k) => k.rgb), inkMeta: inks, bg, deep, accent };
+  /* ---------- index buffers + pixel primitives ---------- */
+  function buf(w, h, fill) { return { w, h, d: new Int16Array(w * h).fill(fill) }; }
+  function px(b, x, y, c) {
+    x |= 0; y |= 0;
+    if (x < 0 || y < 0 || x >= b.w || y >= b.h) return;
+    b.d[y * b.w + x] = c;
   }
-
-  /* ---------- layouts: where each line of the poem lands ---------- */
-  function gauss(rand) { return (rand() + rand() + rand() + rand() - 2) / 2; }
-
-  function layout(modeKey, f, rand) {
-    const lines = f.lineInfo.slice(0, 48);
-    const N = lines.length;
-    const cx = W / 2, cy = H / 2;
-    const pts = [];
-    const phase = rand() * TAU;
-    const center = { x: cx + (rand() - 0.5) * W * 0.25, y: cy + (rand() - 0.5) * H * 0.15 };
-    switch (modeKey) {
-      case 'water': {
-        const waves = 1 + Math.round(f.lineVariance * 2 + rand());
-        lines.forEach((_, i) => {
-          const t = (i + 0.5) / N;
-          pts.push({ x: W * (0.08 + 0.84 * t), y: cy + Math.sin(t * TAU * waves * 0.5 + phase) * H * 0.26 + gauss(rand) * 40 });
-        });
-        break;
-      }
-      case 'fire': {
-        const o = { x: cx + (rand() - 0.5) * W * 0.2, y: H * 0.95 };
-        center.x = o.x; center.y = o.y;
-        lines.forEach((_, i) => {
-          const a = -Math.PI / 2 + ((N > 1 ? i / (N - 1) : 0.5) - 0.5) * Math.PI * 0.95 + gauss(rand) * 0.12;
-          const r = H * (0.25 + 0.62 * rand());
-          pts.push({ x: o.x + Math.cos(a) * r * 1.35, y: o.y + Math.sin(a) * r });
-        });
-        break;
-      }
-      case 'earth': {
-        const S = Math.max(1, f.stanzaCount);
-        lines.forEach((l) => {
-          const y = H * (0.14 + 0.72 * (l.stanza + 0.5) / S) + gauss(rand) * 18;
-          const x = W * (0.08 + 0.84 * (l.idxInStanza + 0.5) / l.stanzaSize);
-          pts.push({ x, y });
-        });
-        break;
-      }
-      case 'air':
-        lines.forEach(() => pts.push({ x: W * (0.06 + 0.88 * rand()), y: H * (0.08 + 0.66 * Math.pow(rand(), 1.3)) }));
-        break;
-      case 'night': {
-        const R = H * 0.34;
-        lines.forEach((_, i) => {
-          const a = (i / N) * TAU + phase;
-          pts.push({ x: center.x + Math.cos(a) * R * 1.4, y: center.y + Math.sin(a) * R });
-        });
-        break;
-      }
-      case 'body':
-        lines.forEach(() => pts.push({ x: center.x + gauss(rand) * W * 0.2, y: center.y + gauss(rand) * H * 0.24 }));
-        break;
-      case 'time':
-        lines.forEach((_, i) => {
-          const a = i * 2.39996 + phase;
-          const r = (Math.sqrt(i + 0.5) / Math.sqrt(N)) * H * 0.43;
-          pts.push({ x: center.x + Math.cos(a) * r * 1.3, y: center.y + Math.sin(a) * r });
-        });
-        break;
-      case 'love': {
-        const k = 2 + Math.floor(rand() * 3);
-        lines.forEach((_, i) => {
-          const th = (i / N) * TAU + phase;
-          const r = H * 0.42 * (0.2 + 0.8 * Math.abs(Math.cos(k * th)));
-          pts.push({ x: center.x + Math.cos(th) * r * 1.3, y: center.y + Math.sin(th) * r });
-        });
-        break;
-      }
-      case 'measure': {
-        const cols = Math.ceil(Math.sqrt(N * 16 / 9)), rows = Math.ceil(N / cols);
-        lines.forEach((_, i) => {
-          const c = i % cols, r = Math.floor(i / cols);
-          pts.push({ x: W * (0.1 + 0.8 * (c + 0.5) / cols), y: H * (0.12 + 0.76 * (r + 0.5) / rows) });
-        });
-        break;
-      }
-      default: { // murmur: loosely spaced scatter
-        const minD = Math.min(W, H) * 0.5 / Math.sqrt(N + 1);
-        lines.forEach(() => {
-          let p, tries = 0;
-          do { p = { x: W * (0.07 + 0.86 * rand()), y: H * (0.1 + 0.8 * rand()) }; tries++; }
-          while (tries < 30 && pts.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < minD));
-          pts.push(p);
-        });
-      }
+  function line(b, x0, y0, x1, y1, c) {
+    x0 |= 0; y0 |= 0; x1 |= 0; y1 |= 0;
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (let guard = 0; guard < 8000; guard++) {
+      px(b, x0, y0, c);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
     }
-    pts.forEach((p) => { p.x = clamp(p.x, 70, W - 70); p.y = clamp(p.y, 70, H - 70); });
-    return { pts, lines, center };
   }
-
-  /* ---------- glyph shapes, one per sound family ---------- */
-  function shardPath(ctx, x, y, r, rot, rand) {
-    const n = 3 + Math.floor(rand() * 4);
-    const angs = Array.from({ length: n }, () => rand() * TAU).sort((a, b) => a - b);
-    ctx.beginPath();
-    angs.forEach((a, i) => {
-      const rr = r * (0.55 + rand() * 0.8);
-      const px = x + Math.cos(a + rot) * rr, py = y + Math.sin(a + rot) * rr;
-      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-    });
-    ctx.closePath();
-  }
-  function blobPath(ctx, x, y, r, noise, off) {
-    const n = 56, pts = [];
+  function ring(b, cx, cy, r, c, dashed) {
+    const n = Math.max(12, Math.ceil(TAU * r * 1.4));
     for (let i = 0; i < n; i++) {
+      if (dashed && (i % 6) > 2) continue;
       const a = (i / n) * TAU;
-      const rr = r * (1 + 0.38 * noise(Math.cos(a) * 1.1 + off, Math.sin(a) * 1.1 + off));
-      pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr]);
+      px(b, cx + Math.cos(a) * r, cy + Math.sin(a) * r, c);
     }
-    ctx.beginPath();
-    for (let i = 0; i <= n; i++) {
-      const p = pts[i % n], q = pts[(i + 1) % n];
-      const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
-      i ? ctx.quadraticCurveTo(p[0], p[1], mx, my) : ctx.moveTo(mx, my);
-    }
-    ctx.closePath();
   }
-  function ribbonPath(ctx, x, y, r, rot, rand) {
-    const freq = 1.2 + rand() * 1.6;
-    ctx.beginPath();
-    for (let i = 0; i <= 48; i++) {
-      const t = i / 24 - 1;
-      const lx = t * r * 1.9, ly = Math.sin(t * Math.PI * freq) * r * 0.5;
-      const px = x + lx * Math.cos(rot) - ly * Math.sin(rot);
-      const py = y + lx * Math.sin(rot) + ly * Math.cos(rot);
-      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-    }
+  function rect(b, x, y, w, h, c) {
+    for (let yy = y | 0; yy < (y + h) | 0; yy++) for (let xx = x | 0; xx < (x + w) | 0; xx++) px(b, xx, yy, c);
+  }
+  function fbm(noise, x, y, oct = 4) {
+    let s = 0, a = 0.5, f = 1, n = 0;
+    for (let i = 0; i < oct; i++) { s += a * noise(x * f, y * f); n += a; a *= 0.5; f *= 2.03; }
+    return s / n;
+  }
+  const unit = (v) => clamp(0.5 + v * 0.75); // fbm (~±0.65) -> 0..1
+
+  /* ---------- scene choice ---------- */
+  function pickScene(f, rand) {
+    const t = f.themes;
+    const scores = {
+      poster: 0.45 + (f.stanzaCount > 1 ? 0.25 : 0) + f.rhyme * 0.3 + f.meter * 0.15,
+      columns: f.energy * 0.9 + (t.night || 0) * 0.6 + clamp(f.exclaim * 2) * 0.4 + (t.fire || 0) * 0.2,
+      tiles: f.repetition * 0.9 + f.meter * 0.3 + (f.wordCount > 70 ? 0.2 : 0) + (t.time || 0) * 0.3,
+      skyline: ((t.earth || 0) + (t.water || 0)) * 0.6 + f.calm * 0.45 + (t.air || 0) * 0.2,
+      knit: f.intensity * 0.35 + f.liquid * 0.35 + (t.love || 0) * 0.5 + (t.body || 0) * 0.3
+    };
+    let best = 'poster', bs = -1;
+    for (const k in scores) { const s = scores[k] + rand() * 0.55; if (s > bs) { bs = s; best = k; } }
+    return best;
   }
 
-  /* ---------- the plan ---------- */
-  C.plan = function (ctx, f, seed) {
+  function pickPalette(f, rand, scene) {
+    let best = PALETTES[0], bs = -Infinity;
+    for (const p of PALETTES) {
+      let s = rand() * 0.7;
+      for (const k in p.tags) s += (f.themes[k] || 0) * p.tags[k];
+      s += (p.energy || 0) * f.energy * 0.5;
+      if (p.dark) s += (f.sentiment < -0.1 ? 0.35 : 0) + (scene === 'columns' ? 1.2 : 0);
+      else if (scene === 'columns') s -= 0.6;
+      if (scene === 'skyline') s += (p.sky || 0) * 0.7;
+      if (scene === 'tiles' && p.c.length >= 5) s += 0.4;
+      if (s > bs) { bs = s; best = p; }
+    }
+    return best;
+  }
+
+  /* ---------- the painting ---------- */
+  C.paint = function (f, seed, opts) {
     const rand = C.prng(seed);
     const noise = C.makeNoise(rand);
-    const modeKey = pickMode(f);
-    const mode = Object.assign({ key: modeKey }, MODES[modeKey]);
-    const pal = buildPalette(f, rand, modeKey);
-    const lay = layout(modeKey, f, rand);
-    const blendOn = pal.dark ? 'screen' : 'multiply';
-    const pick = () => pal.inks[Math.floor(rand() * pal.inks.length)];
-    const steps = [];
+    const picked = pickScene(f, rand);
+    const scene = (opts && opts.scene) || picked;
+    const pal = pickPalette(f, rand, scene);
 
-    // 1. Ground: background and soft color fields (one per stanza)
-    steps.push({ label: 'Ground', fn() {
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = rgba(pal.bg);
-      ctx.fillRect(0, 0, W, H);
-      const fields = clamp(f.stanzaCount + 1, 2, 6);
-      ctx.globalCompositeOperation = blendOn;
-      for (let i = 0; i < fields; i++) {
-        const x = rand() * W, y = rand() * H, r = H * (0.4 + rand() * 0.7);
-        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        const c = pal.inks[i % pal.inks.length];
-        g.addColorStop(0, rgba(c, 0.22 + f.intensity * 0.18));
-        g.addColorStop(1, rgba(c, 0));
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
+    // palette as RGB list; derived tones get appended on demand
+    const P = pal.c.map(hexRgb);
+    const toneCache = {};
+    function tone(i, j, t) {
+      const k = i + ':' + j + ':' + t;
+      if (toneCache[k] !== undefined) return toneCache[k];
+      P.push(P[i].map((v, n) => Math.round(v + (P[j][n] - v) * t)));
+      return (toneCache[k] = P.length - 1);
+    }
+    const base = pal.c.length;
+    const G = 0; // ground
+    const inks = Array.from({ length: base - 1 }, (_, i) => i + 1);
+    const contrast = inks.reduce((a, b) => (Math.abs(lum(P[b]) - lum(P[G])) > Math.abs(lum(P[a]) - lum(P[G])) ? b : a));
+    const accent = inks.reduce((a, b) => (sat(P[b]) + Math.abs(lum(P[b]) - lum(P[G])) * 0.4 > sat(P[a]) + Math.abs(lum(P[a]) - lum(P[G])) * 0.4 ? b : a));
+    const pickInk = () => inks[Math.floor(rand() * inks.length)];
+
+    // pixel size: hard consonants -> chunky, soft sounds -> fine
+    const delicacy = clamp(0.45 + 0.35 * f.sibilant + 0.3 * f.liquid - 0.45 * f.plosive + 0.2 * f.calm);
+    const widths = [192, 240, 320, 480];
+    let W0 = widths[Math.round(delicacy * 3)];
+    if (scene === 'tiles') W0 = 480;
+    if (scene === 'columns') W0 = 240;
+    if (scene === 'knit') W0 = 160;
+    if (scene === 'skyline') W0 = 320;
+    const H0 = Math.round((W0 * 9) / 16);
+    const B = buf(W0, H0, G);
+    const A = buf(AW, AH, -1);
+
+    const lines = f.lineInfo.length ? f.lineInfo : [{ words: 1, syl: 1, sound: 'liquid', endPunct: '', wordLens: [4], wordCodes: [7], wordStops: [false], stanza: 0 }];
+    const allWords = [];
+    lines.forEach((l) => l.wordLens.forEach((len, i) => allWords.push({ len, code: l.wordCodes[i], stop: l.wordStops[i] })));
+    if (!allWords.length) allWords.push({ len: 4, code: 7, stop: false });
+
+    /* ===== scenes ===== */
+    function SCENES_poster() {
+      // stanza -> region, region pattern from that stanza's dominant sound
+      const S = clamp(f.stanzaCount || 1, 1, 4);
+      const margin = f.meter > 0.5 || rand() < 0.4 ? Math.round(H0 * (0.04 + rand() * 0.04)) : 0;
+      const box = { x0: margin, y0: margin, x1: W0 - margin, y1: H0 - margin };
+      const stanzaSound = [];
+      for (let s = 0; s < S; s++) {
+        const counts = {};
+        lines.filter((l) => Math.min(l.stanza, S - 1) === s).forEach((l) => { counts[l.sound] = (counts[l.sound] || 0) + 1; });
+        stanzaSound.push(Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || 'liquid');
       }
-      ctx.restore();
-    } });
-
-    // 2. Strata: a wavering band per stanza
-    if (f.stanzaCount > 1 || modeKey === 'earth') {
-      steps.push({ label: 'Strata', fn() {
-        ctx.save();
-        ctx.globalCompositeOperation = blendOn;
-        const S = Math.max(2, f.stanzaCount);
-        const tilt = (rand() - 0.5) * f.lineVariance * 0.35;
-        for (let s = 0; s < S; s++) {
-          const y0 = (H * (s + 0.25)) / S, th = (H / S) * (0.35 + rand() * 0.4);
-          ctx.beginPath();
-          for (let x = -40; x <= W + 40; x += 20) {
-            const y = y0 + noise(x * 0.0016, s * 3.1) * 60 + Math.tan(tilt) * (x - W / 2);
-            x === -40 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-          }
-          for (let x = W + 40; x >= -40; x -= 20) {
-            const y = y0 + th + noise(x * 0.0016, s * 3.1 + 9) * 60 + Math.tan(tilt) * (x - W / 2);
-            ctx.lineTo(x, y);
-          }
-          ctx.closePath();
-          ctx.fillStyle = rgba(pal.inks[(s + 1) % pal.inks.length], 0.12 + f.meter * 0.12);
-          ctx.fill();
-        }
-        ctx.restore();
-      } });
-    }
-
-    // 3. Ghost type: the poem's key word, huge and cropped
-    if (f.keyword) {
-      steps.push({ label: 'Keyword', fn() {
-        ctx.save();
-        const word = f.caps > 0.5 ? f.keyword.toUpperCase() : f.keyword;
-        const size = clamp((W * 1.5) / word.length, 220, 640);
-        ctx.font = `italic 400 ${size}px "Libre Caslon Text", Georgia, serif`;
-        ctx.textBaseline = 'alphabetic';
-        const x = W * (rand() * 0.25 - 0.06), y = H * (0.6 + rand() * 0.35);
-        ctx.translate(x, y);
-        ctx.rotate((rand() - 0.5) * 0.12);
-        ctx.fillStyle = rgba(pal.deep, pal.dark ? 0.07 : 0.06);
-        ctx.fillText(word, 0, 0);
-        ctx.lineWidth = 1.6;
-        ctx.strokeStyle = rgba(pal.deep, 0.3);
-        ctx.strokeText(word, 0, 0);
-        ctx.restore();
-      } });
-    }
-
-    // 4. Flow field: one particle per handful of words, steered by the mode
-    const particles = Math.round(clamp(1200 + f.wordCount * 20, 1200, 4200));
-    const stepsPer = Math.round(40 + clamp(f.avgLineWords / 12) * 90);
-    const turbulence = 0.6 + f.energy * 2.4 - f.sibilant * 0.5;
-    const scale = 0.0011 + f.energy * 0.0025;
-    const biasStrength = f.dominantTheme ? 0.3 + f.themes[f.dominantTheme] * 0.45 : 0.15;
-    const stepLen = 1.6 + f.avgWordLen * 0.35;
-    const baseLW = 0.5 + f.avgWordLen * 0.28;
-    const fc = lay.center;
-    function bias(x, y) {
-      switch (modeKey) {
-        case 'water': return Math.sin(y * 0.004 + x * 0.0015) * 0.5;
-        case 'fire': return -Math.PI / 2 + Math.sin(x * 0.006) * 0.3;
-        case 'earth': return 0;
-        case 'air': return -Math.PI / 7;
-        case 'night': return Math.atan2(y - fc.y, x - fc.x) + Math.PI / 2;
-        case 'body': return Math.atan2(fc.y - y, fc.x - x) + 0.5;
-        case 'time': return Math.atan2(y - fc.y, x - fc.x) + Math.PI / 2 + 0.35;
-        case 'love': return Math.atan2(y - fc.y, x - fc.x) + Math.PI / 2 - 0.4;
-        default: return null;
-      }
-    }
-    const chunks = 10;
-    for (let c = 0; c < chunks; c++) {
-      steps.push({ label: 'Flow', fn() {
-        ctx.save();
-        ctx.globalCompositeOperation = blendOn;
-        ctx.lineCap = 'round';
-        const count = Math.ceil(particles / chunks);
-        for (let p = 0; p < count; p++) {
-          let x, y;
-          if (f.calm > 0.55 && rand() < 0.6) { x = rand() * W * 0.15 - 20; y = rand() * H; }
-          else { x = rand() * W; y = rand() * H; }
-          const col = pick();
-          ctx.strokeStyle = rgba(col, clamp(0.07 + (1 - particles / 4200) * 0.14, 0.05, 0.22));
-          ctx.lineWidth = baseLW * (0.4 + rand() * 1.2);
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          const len = Math.round(stepsPer * (0.4 + rand() * 0.8));
-          for (let s = 0; s < len; s++) {
-            let a = noise(x * scale, y * scale) * Math.PI * turbulence;
-            if (modeKey === 'measure') a = Math.round(a / (Math.PI / 4)) * (Math.PI / 4);
-            const b = bias(x, y);
-            let vx = Math.cos(a), vy = Math.sin(a);
-            if (b !== null) { vx = lerp(vx, Math.cos(b), biasStrength); vy = lerp(vy, Math.sin(b), biasStrength); }
-            const m = Math.hypot(vx, vy) || 1;
-            x += (vx / m) * stepLen; y += (vy / m) * stepLen;
-            if (x < -50 || x > W + 50 || y < -50 || y > H + 50) break;
-            ctx.lineTo(x, y);
-          }
-          ctx.stroke();
-        }
-        ctx.restore();
-      } });
-    }
-
-    // 5. Echo grid: repeated words become a halftone of dots
-    if (f.repetition > 0.12) {
-      steps.push({ label: 'Echo', fn() {
-        ctx.save();
-        const sp = 16 + (1 - f.repetition) * 26;
-        const R = H * (0.18 + f.repetition * 0.32);
-        const ox = W * (0.15 + rand() * 0.7), oy = H * (0.2 + rand() * 0.6);
-        ctx.fillStyle = rgba(pal.accent, pal.dark ? 0.85 : 0.8);
-        for (let gx = ox - R; gx <= ox + R; gx += sp) {
-          for (let gy = oy - R; gy <= oy + R; gy += sp) {
-            const d = Math.hypot(gx - ox, gy - oy) / R;
-            if (d > 1) continue;
-            const r = sp * 0.42 * Math.sqrt(1 - d) * (0.35 + 0.65 * (noise(gx * 0.004, gy * 0.004) * 0.5 + 0.5));
-            if (r < 0.6) continue;
-            ctx.beginPath(); ctx.arc(gx, gy, r, 0, TAU); ctx.fill();
-          }
-        }
-        ctx.restore();
-      } });
-    }
-
-    // 6. Focus: "I" becomes a sun, "you" a ring, both get a tether
-    if (f.self > 0.05 || f.other > 0.05) {
-      steps.push({ label: 'Focus', fn() {
-        ctx.save();
-        const a = { x: W * 0.618, y: H * 0.382 }, b = { x: W * 0.382, y: H * 0.618 };
-        if (rand() < 0.5) { a.x = W - a.x; b.x = W - b.x; }
-        if (f.self > 0.05 && f.other > 0.05) {
-          ctx.strokeStyle = rgba(pal.deep, 0.55);
-          ctx.lineWidth = 2;
-          ctx.setLineDash([2, 10]);
-          ctx.lineCap = 'round';
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-          ctx.setLineDash([]);
-        }
-        if (f.self > 0.05) {
-          ctx.globalCompositeOperation = blendOn;
-          ctx.fillStyle = rgba(pal.inks[0], 0.85);
-          ctx.beginPath(); ctx.arc(a.x, a.y, H * (0.08 + f.self * 0.14), 0, TAU); ctx.fill();
-        }
-        if (f.other > 0.05) {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = rgba(pal.inks[2], 0.9);
-          ctx.lineWidth = 6 + f.other * 10;
-          ctx.beginPath(); ctx.arc(b.x, b.y, H * (0.07 + f.other * 0.12), 0, TAU); ctx.stroke();
-        }
-        ctx.restore();
-      } });
-    }
-
-    // 7. Glyphs: one mark per line. Sound picks the shape; punctuation picks the finish.
-    const N = lay.lines.length;
-    const sizeScale = clamp(Math.sqrt(14 / Math.max(1, N)), 0.5, 1.9);
-    const misreg = 2 + f.alliteration * 16;
-    const glyphs = lay.lines.map((l, i) => ({
-      line: l, x: lay.pts[i].x, y: lay.pts[i].y,
-      r: clamp(18 + l.words * 7, 22, 110) * sizeScale,
-      rot: (rand() - 0.5) * TAU * (0.2 + f.lineVariance * 0.8),
-      color: pal.inks[i % pal.inks.length], alt: pal.inks[(i + 2) % pal.inks.length]
-    }));
-    const perStep = Math.max(1, Math.ceil(N / 4));
-    for (let s = 0; s < N; s += perStep) {
-      const batch = glyphs.slice(s, s + perStep);
-      steps.push({ label: 'Lines', fn() {
-        for (const g of batch) drawGlyph(g);
-      } });
-    }
-    function drawGlyph(g) {
-      const { x, y, r, rot, line } = g;
-      const outlined = !line.endPunct; // enjambed lines stay open
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      const pass = (dx, dy, color, alpha, op) => {
-        ctx.globalCompositeOperation = op;
-        ctx.save();
-        ctx.translate(dx, dy);
-        const lw = Math.max(2.5, r * 0.07);
-        if (line.sound === 'plosive') {
-          shardPath(ctx, x, y, r, rot, C.prng(g.seed || (g.seed = Math.floor(rand() * 1e9))));
-        } else if (line.sound === 'liquid') {
-          blobPath(ctx, x, y, r, noise, x * 0.01);
-        } else if (line.sound === 'sibilant') {
-          ribbonPath(ctx, x, y, r, rot, C.prng(g.seed || (g.seed = Math.floor(rand() * 1e9))));
-          ctx.strokeStyle = rgba(color, alpha);
-          ctx.lineWidth = outlined ? lw : r * 0.3;
-          ctx.stroke();
-          ctx.restore();
-          return;
-        } else {
-          const k = clamp(Math.round(line.syl / 3), 2, 7);
-          ctx.strokeStyle = rgba(color, alpha);
-          ctx.lineWidth = outlined ? lw * 0.6 : lw;
-          for (let i = 1; i <= k; i++) { ctx.beginPath(); ctx.arc(x, y, (r * i) / k, 0, TAU); ctx.stroke(); }
-          ctx.restore();
-          return;
-        }
-        if (outlined) { ctx.strokeStyle = rgba(color, alpha); ctx.lineWidth = lw; ctx.stroke(); }
-        else { ctx.fillStyle = rgba(color, alpha); ctx.fill(); }
-        ctx.restore();
+      const regions = [];
+      const split = S === 1 ? (rand() < 0.6 ? 'inset' : 'single') : (f.lineVariance > 0.55 ? 'cols' : 'bands');
+      const two = f.intensity < 0.35 || rand() < 0.5; // strict two-color poster
+      const ramp = (r) => {
+        if (two) return r % 2 ? [inks[0], G] : [G, inks[0]];
+        const a = inks[r % inks.length], b = inks[(r + 1) % inks.length];
+        return r % 2 ? [a, G] : [G, a, b].slice(0, f.energy > 0.45 ? 3 : 2);
       };
-      // riso-style misregistration: a second color, offset by alliteration
-      pass(misreg, misreg * 0.6, g.alt, 0.75, blendOn);
-      pass(0, 0, g.color, 0.92, 'source-over');
-
-      // line endings
-      ctx.globalCompositeOperation = 'source-over';
-      const p = line.endPunct;
-      ctx.strokeStyle = rgba(pal.deep, 0.85);
-      ctx.fillStyle = rgba(pal.deep, 0.9);
-      ctx.lineWidth = 2.5;
-      if (p.includes('?')) {
-        const a0 = rand() * TAU;
-        ctx.beginPath(); ctx.arc(x, y, r * 1.4, a0, a0 + TAU * 0.72); ctx.stroke();
-      }
-      if (p.includes('!')) {
-        const n = 8 + Math.floor(rand() * 6);
-        for (let i = 0; i < n; i++) {
-          const a = (i / n) * TAU + rot;
-          ctx.beginPath();
-          ctx.moveTo(x + Math.cos(a) * r * 1.25, y + Math.sin(a) * r * 1.25);
-          ctx.lineTo(x + Math.cos(a) * r * 1.85, y + Math.sin(a) * r * 1.85);
-          ctx.stroke();
+      if (split === 'inset' || split === 'single') {
+        regions.push({ ...box, fn: pattern(stanzaSound[0], box), ramp: ramp(0) });
+        if (split === 'inset') {
+          const ins = Math.round(H0 * (0.12 + rand() * 0.12));
+          const inner = { x0: box.x0 + ins * 1.6, y0: box.y0 + ins, x1: box.x1 - ins * 1.6, y1: box.y1 - ins };
+          regions.push({ ...inner, fn: pattern(soundFor(1), inner), ramp: ramp(1) });
+        }
+      } else {
+        const total = lines.length;
+        let acc = 0;
+        for (let s = 0; s < S; s++) {
+          const n = lines.filter((l) => Math.min(l.stanza, S - 1) === s).length || 1;
+          const a = acc / total, b = (acc + n) / total;
+          acc += n;
+          const r = split === 'bands'
+            ? { x0: box.x0, x1: box.x1, y0: Math.round(box.y0 + (box.y1 - box.y0) * a) + (s ? 1 : 0), y1: Math.round(box.y0 + (box.y1 - box.y0) * b) }
+            : { y0: box.y0, y1: box.y1, x0: Math.round(box.x0 + (box.x1 - box.x0) * a) + (s ? 1 : 0), x1: Math.round(box.x0 + (box.x1 - box.x0) * b) };
+          regions.push({ ...r, fn: pattern(stanzaSound[s], r), ramp: ramp(s) });
         }
       }
-      if (p.includes(',')) {
-        for (let i = 1; i <= 3; i++) { ctx.beginPath(); ctx.arc(x + r + i * 16, y + i * 5, 4.5 - i, 0, TAU); ctx.fill(); }
-      }
-      if (p.includes('.') && !p.includes('..')) { ctx.beginPath(); ctx.arc(x, y, Math.max(5, r * 0.09), 0, TAU); ctx.fill(); }
-      if (/[;:]/.test(p)) {
-        ctx.beginPath(); ctx.arc(x - 8, y - r - 14, 5, 0, TAU); ctx.arc(x + 8, y - r - 14, 5, 0, TAU); ctx.fill();
-      }
-      if (/—|–|-/.test(p)) {
-        ctx.beginPath(); ctx.moveTo(x + r * 1.1, y); ctx.lineTo(x + r * 2.2, y); ctx.stroke();
-      }
-      if (/\.\.\.|…/.test(p)) {
-        for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x - 18 + i * 18, y + r + 18, 4, 0, TAU); ctx.fill(); }
-      }
-      ctx.restore();
-    }
-
-    // 8. Rhyme threads: arcs between lines that rhyme
-    if (f.rhymePairs.length) {
-      steps.push({ label: 'Rhyme', fn() {
-        ctx.save();
-        ctx.strokeStyle = rgba(pal.deep, 0.7);
-        ctx.fillStyle = rgba(pal.deep, 0.9);
-        ctx.lineWidth = 2;
-        for (const [i, j] of f.rhymePairs) {
-          if (!glyphs[i] || !glyphs[j]) continue;
-          const a = glyphs[i], b = glyphs[j];
-          const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const k = (rand() < 0.5 ? -1 : 1) * 0.35;
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.quadraticCurveTo(mx - dy * k, my + dx * k, b.x, b.y);
-          ctx.stroke();
-          for (const g of [a, b]) { ctx.beginPath(); ctx.arc(g.x, g.y, 5, 0, TAU); ctx.fill(); }
+      fillRegions(regions);
+      if (f.self > 0.05) sun();
+      function soundFor(i) { return ['nasal', 'sibilant', 'plosive', 'liquid'][(i + Math.floor(rand() * 4)) % 4]; }
+      function sun() {
+        const r = H0 * (0.12 + f.self * 0.12);
+        const cx = W0 * (rand() < 0.5 ? 0.33 : 0.67), cy = H0 * (0.55 + rand() * 0.2);
+        const c = two ? inks[0] : accent;
+        for (let y = Math.floor(cy - r); y <= cy + r; y++) {
+          for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+            if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+            const slit = y > cy && ((y - Math.floor(cy)) % 5) < 1 + ((y - cy) / r) * 2.5;
+            px(B, x, y, slit ? G : c);
+          }
         }
-        ctx.restore();
-      } });
+      }
     }
 
-    // 9. Mirror: strongly rhymed poems fold into partial symmetry
-    if (f.rhyme > 0.45) {
-      steps.push({ label: 'Mirror', fn() {
-        const copy = document.createElement('canvas');
-        copy.width = W; copy.height = H;
-        copy.getContext('2d').drawImage(ctx.canvas, 0, 0);
-        ctx.save();
-        ctx.globalAlpha = 0.18 + f.rhyme * 0.25;
-        ctx.globalCompositeOperation = blendOn;
-        ctx.translate(W, 0); ctx.scale(-1, 1);
-        ctx.drawImage(copy, 0, 0);
-        ctx.restore();
-      } });
+    function pattern(sound, reg) {
+      const opts = { plosive: ['blocks', 'rain', 'checker'], sibilant: ['waves', 'warp'], liquid: ['blobs', 'warp'], nasal: ['moire', 'rings'] }[sound] || ['warp'];
+      const kind = opts[Math.floor(rand() * opts.length)];
+      const cx = (reg.x0 + (reg.x1 - reg.x0) * (0.2 + rand() * 0.6)) / H0, cy = (reg.y0 + (reg.y1 - reg.y0) * (0.2 + rand() * 0.6)) / H0;
+      const o = rand() * 100;
+      switch (kind) {
+        case 'moire': {
+          const c2x = cx + (rand() - 0.5) * 0.6, c2y = cy + (rand() - 0.5) * 0.4;
+          const fr = 60 + rand() * 90;
+          return { L: 2, fn: (nx, ny) => 0.5 + 0.5 * Math.sin(Math.hypot(nx - cx, ny - cy) * fr) * Math.sin(Math.hypot(nx - c2x, ny - c2y) * fr * 1.06) };
+        }
+        case 'rings': {
+          const fr = 25 + rand() * 40;
+          return { L: 2, fn: (nx, ny) => { const d = Math.hypot(nx - cx, ny - cy); return ((d * fr + fbm(noise, nx * 3 + o, ny * 3) * 1.5) % 1 + 1) % 1 < 0.5 ? 1 : 0; } };
+        }
+        case 'warp': {
+          const sc = 0.8 + rand() * 1.2, bands = 2 + Math.floor(rand() * 2);
+          return { L: 2, fn: (nx, ny) => {
+            const q = fbm(noise, nx * sc + o, ny * sc, 2);
+            const r = fbm(noise, nx * sc + 2.2 * q + 1.7, ny * sc + 2.2 * q + 9.2, 3);
+            return ((unit(r) * bands) % 1);
+          } };
+        }
+        case 'waves': {
+          const fr = 35 + rand() * 60, amp = 0.5 + rand() * 1.4;
+          return { L: 2, fn: (nx, ny) => 0.5 + 0.5 * Math.sin(ny * fr + amp * fbm(noise, nx * 2 + o, ny * 2, 3) * TAU) };
+        }
+        case 'blobs': {
+          const sc = 1.3 + rand() * 1.8;
+          return { L: 3, fn: (nx, ny) => unit(fbm(noise, nx * sc + o, ny * sc, 5) * 1.3) };
+        }
+        case 'checker': {
+          const a = 30 + rand() * 50, b = 30 + rand() * 50;
+          return { L: 2, fn: (nx, ny) => 0.5 + 0.5 * Math.sin(nx * a + fbm(noise, nx * 2, ny * 2 + o) * 4) * Math.sin(ny * b) };
+        }
+        case 'rain': {
+          const cw = 0.012 + rand() * 0.025;
+          return { L: 2, fn: (nx, ny) => {
+            const col = Math.floor(nx / cw);
+            const h = (C.seed32('r' + col + o) % 1000) / 1000;
+            const top = h * 0.6, len = 0.2 + ((C.seed32('l' + col + o) % 1000) / 1000) * 0.8;
+            return ny > top + (reg.y0 / H0) && ny < top + len + (reg.y0 / H0) ? 1 : 0;
+          } };
+        }
+        default: { // blocks: xor of word-sized rectangles
+          const rs = [];
+          const n = 6 + Math.floor(rand() * 9);
+          for (let i = 0; i < n; i++) {
+            const w = allWords[(i * 3) % allWords.length].len;
+            rs.push({ x: reg.x0 + rand() * (reg.x1 - reg.x0), y: reg.y0 + rand() * (reg.y1 - reg.y0), w: (reg.x1 - reg.x0) * (0.05 + w * 0.025), h: (reg.y1 - reg.y0) * (0.04 + rand() * 0.3) });
+          }
+          return { L: 2, px: true, fn: (x, y) => { let k = 0; for (const r of rs) if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) k++; return k % 2; } };
+        }
+      }
     }
 
-    // 10. Grain, then the signature
-    steps.push({ label: 'Grain', fn() {
-      const img = ctx.getImageData(0, 0, W, H);
-      const d = img.data;
-      const amt = 10 + (f.plosive + f.caps) * 10;
-      let s = seed | 1;
-      for (let i = 0; i < d.length; i += 4) {
+    function fillRegions(regions) {
+      for (let y = 0; y < H0; y++) {
+        for (let x = 0; x < W0; x++) {
+          let reg = null;
+          for (let i = regions.length - 1; i >= 0; i--) {
+            const r = regions[i];
+            if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) { reg = r; break; }
+          }
+          if (!reg) continue;
+          const p = reg.fn;
+          const v = p.px ? p.fn(x, y) : p.fn(x / H0, y / H0);
+          const L = Math.min(p.L, reg.ramp.length);
+          const lvl = clamp(Math.floor(v * (L - 1) + bayer(x, y)), 0, L - 1);
+          B.d[y * W0 + x] = reg.ramp[lvl];
+        }
+      }
+    }
+
+    // neon glitch columns: one column per line, one stacked block per word
+    function SCENES_columns() {
+      const dimAcc = tone(G, accent, 0.28);
+      for (let k = -H0; k < W0; k += 9 + Math.floor(rand() * 10)) line(B, k, H0, k + H0, 0, dimAcc);
+      const colW = 5 + Math.round(clamp(f.avgWordLen / 7) * 3), gap = 2;
+      const nCols = Math.floor((W0 - 8) / (colW + gap));
+      const x0 = Math.floor((W0 - nCols * (colW + gap)) / 2);
+      for (let c = 0; c < nCols; c++) {
+        if (rand() < 0.12) continue;
+        const l = lines[c % lines.length];
+        let y = Math.floor(H0 * (0.02 + 0.45 * unit(noise(c * 0.17, 3.3)) * (0.4 + rand() * 0.8)));
+        const words = l.wordLens.length ? l.wordLens.map((len, i) => ({ len, code: l.wordCodes[i] })) : [{ len: 3, code: 1 }];
+        const xc = x0 + c * (colW + gap) + (rand() < 0.2 ? Math.round((rand() - 0.5) * 4) : 0);
+        let w = 0;
+        while (y < H0 * 0.95 && w < words.length * 2) {
+          const wd = words[w % words.length];
+          const h = Math.max(2, wd.len * 2 + (wd.code % 3));
+          const ink = inks[(wd.code + c) % inks.length];
+          const dim = tone(G, ink, 0.35);
+          const up = (wd.code >> 3) % 2;
+          for (let yy = 0; yy < h; yy++) {
+            const v = wd.len < 4 ? 1 : (up ? 1 - yy / h : yy / h) * 0.85 + 0.15;
+            for (let xx = 0; xx < colW; xx++) {
+              const lvl = clamp(Math.floor(v * 2 + bayer(xc + xx, y + yy)), 0, 2);
+              px(B, xc + xx, y + yy, [G, dim, ink][lvl]);
+            }
+          }
+          y += h + (wd.code % 4 === 0 ? 3 : 0);
+          w++;
+        }
+      }
+    }
+
+    // word tiles: every word becomes a tile; content words get richer motifs
+    function SCENES_tiles() {
+      const cols = clamp(Math.round(18 + allWords.length / 6), 18, 40);
+      const t = Math.floor(W0 / cols), rows = Math.ceil(H0 / t);
+      const ox = Math.floor((W0 - cols * t) / 2);
+      const all = [G, ...inks];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c;
+          const wd = allWords[i % allWords.length];
+          const rep = Math.floor(i / allWords.length);
+          const h = C.seed32(wd.code + ':' + rep + ':' + seed);
+          const bg = all[h % all.length];
+          let fg = all[(h >>> 4) % all.length];
+          if (fg === bg) fg = all[(all.indexOf(bg) + 1) % all.length];
+          const third = all[(h >>> 9) % all.length];
+          const motif = wd.stop ? [10, 11, 2, 0][wd.code % 4] : wd.code % 12;
+          for (let y = 0; y < t; y++) {
+            for (let x = 0; x < t; x++) {
+              const u = (x + 0.5) / t, v = (y + 0.5) / t;
+              px(B, ox + c * t + x, r * t + y, motifAt(motif, u, v, wd.len) ? fg : (motif === 3 && Math.hypot(u - 0.5, v - 0.5) < 0.14 ? third : bg));
+            }
+          }
+        }
+      }
+    }
+    function motifAt(m, u, v, len) {
+      const du = Math.abs(u - 0.5), dv = Math.abs(v - 0.5), d = Math.hypot(u - 0.5, v - 0.5);
+      switch (m) {
+        case 0: return du + dv < 0.38;
+        case 1: return Math.abs(u - v) < 0.14 || Math.abs(u + v - 1) < 0.14;
+        case 2: return d < 0.38;
+        case 3: return d > 0.24 && d < 0.44;
+        case 4: { const n = 2 + (len % 3); return (Math.floor(u * n) + Math.floor(v * n)) % 2 === 0; }
+        case 5: return ((u + v) * (2 + (len % 3))) % 1 < 0.5;
+        case 6: return ((du + dv) * 4) % 1 < 0.5;
+        case 7: return du < 0.14 || dv < 0.14;
+        case 8: return Math.hypot(du - 0.25, dv - 0.25) < 0.17;
+        case 9: return u > v;
+        case 10: return true;
+        default: return du < 0.16 && dv < 0.16;
+      }
+    }
+
+    // voxel landscape: a still lake, rows of pillars painted back to front, fog dithered in with distance
+    function SCENES_skyline() {
+      const sky = G;
+      const glow = tone(G, accent, 0.3);
+      const hor = Math.round(H0 * (0.3 + rand() * 0.1));
+      const tallC = inks[0], bodyC = inks[1 % inks.length], mossC = inks[2 % inks.length];
+      const lakeFar = tone(G, bodyC, 0.25), lakeNear = tone(G, bodyC, 0.5);
+      for (let y = 0; y < H0; y++) {
+        for (let x = 0; x < W0; x++) {
+          let c;
+          if (y < hor) c = clamp(y / hor) ** 1.6 * 0.9 + bayer(x, y) > 1 ? glow : sky;
+          else c = clamp((y - hor) / (H0 - hor)) + bayer(x, y) * 0.9 > 0.9 ? lakeNear : lakeFar;
+          B.d[y * W0 + x] = c;
+        }
+      }
+      const water = 0.38 + (f.themes.water || 0) * 0.12;
+      const amp = 0.75 + f.energy * 0.5 + f.intensity * 0.3;
+      const rhythm = lines.map((l) => l.syl);
+      const maxSyl = Math.max(1, ...rhythm);
+      const Z = 64;
+      for (let z = 0; z < Z; z++) {
+        const t = z / (Z - 1);
+        const yb = Math.round(hor + Math.pow(t, 1.8) * (H0 - hor) * 1.04);
+        const cw = 1 + Math.floor(t * 5);
+        const maxH = H0 * (0.05 + 0.38 * t) * amp;
+        const fog = Math.pow(1 - t, 1.25) * 0.95;
+        for (let x = -cw; x < W0 + cw; x += cw) {
+          const wx = ((x - W0 / 2) / (W0 * (0.25 + t * 0.75))) * 2.2;
+          const wz = z * 0.06;
+          const ridge = rhythm[Math.abs(Math.floor(wx * 1.2 + wz)) % rhythm.length] / maxSyl;
+          const spike = Math.pow(unit(noise(wx * 4.1 + 7, wz * 3.3)), 3);
+          const hgt = clamp(unit(fbm(noise, wx * 0.45 + 10, wz * 0.8, 3) * 1.5) * (0.8 + 0.35 * ridge) + spike * 0.25);
+          if (hgt < water) continue;
+          const k = (hgt - water) / (1 - water);
+          const cellHash = (C.seed32(Math.floor(x / cw) + ':' + z + ':' + seed) % 1000) / 1000;
+          if (cellHash > 0.3 + k * 0.6) continue; // gaps make separate towers
+          const bh = Math.max(1, Math.pow(k, 1.7) * maxH * (0.6 + cellHash * 0.8));
+          const top = Math.floor(yb - bh);
+          const tall = k > 0.55;
+          for (let yy = top; yy <= yb; yy++) {
+            const fromTop = yy - top;
+            let c = tall && fromTop < bh * 0.7 ? tallC : (k < 0.12 && fromTop < cw ? mossC : bodyC);
+            for (let xx = x; xx < x + cw; xx++) {
+              const cc = bayer(xx, yy) < fog ? (yy < hor ? glow : lakeFar) : c;
+              px(B, xx, yy, cc);
+            }
+          }
+          // broken reflection in the lake
+          const rh = Math.min(bh * 0.6, H0 - yb);
+          for (let yy = yb + 1; yy < yb + rh; yy++) {
+            for (let xx = x; xx < x + cw; xx++) {
+              if (bayer(xx, yy) < 0.45 + fog * 0.5 || (yy & 1)) continue;
+              px(B, xx, yy, tall ? tone(lakeNear, tallC, 0.6) : tone(lakeNear, bodyC, 0.7));
+            }
+          }
+        }
+      }
+    }
+
+    // knit: a dithered color field with an organic threshold, and a band of line-blocks
+    function SCENES_knit() {
+      const ramp = inks.length >= 3 ? [inks[0], G, inks[1], inks[2]] : [G, inks[0]];
+      const corner = [inks[inks.length - 1], ramp[0]];
+      const sc = 1.6 + rand() * 1.2, o = rand() * 50;
+      const cx = 0.6 + rand() * 0.6, cy = 0.35 + rand() * 0.2;
+      const bandY0 = Math.round(H0 * 0.8), bandY1 = Math.round(H0 * 0.93);
+      for (let y = 0; y < H0; y++) {
+        for (let x = 0; x < W0; x++) {
+          const nx = x / H0, ny = y / H0;
+          const thr = bayer(x, y) * 0.5 + ((C.seed32(x + ',' + y + ',' + o) % 1000) / 1000) * 0.5;
+          const inCorner = nx + (1 - ny) * 0.8 > (W0 / H0) * 0.92 + fbm(noise, nx * 4, ny * 4 + o, 2) * 0.25;
+          const r = inCorner ? corner : ramp;
+          let v = unit(fbm(noise, nx * sc + o, ny * sc, 4) * 1.3) * 0.7 + clamp(1 - Math.hypot(nx - cx, ny - cy) * 1.4) * 0.45;
+          v = clamp(v);
+          const lvl = clamp(Math.floor(v * (r.length - 1) + thr), 0, r.length - 1);
+          B.d[y * W0 + x] = r[lvl];
+        }
+      }
+      // band: one block per line, width from word count
+      const bx0 = 2, bx1 = W0 - 3;
+      rect(B, bx0, bandY0, bx1 - bx0, bandY1 - bandY0, inks[2 % inks.length]);
+      line(B, bx0, bandY0, bx1, bandY0, inks[0]); line(B, bx0, bandY1, bx1, bandY1, inks[0]);
+      line(B, bx0, bandY0, bx0, bandY1, inks[0]); line(B, bx1, bandY0, bx1, bandY1, inks[0]);
+      let x = bx0 + 3;
+      const totalW = lines.reduce((s, l) => s + l.words + 1, 0);
+      const k = (bx1 - bx0 - 6) / Math.max(1, totalW);
+      lines.forEach((l, i) => {
+        const w = Math.max(1, Math.round(l.words * k));
+        const hh = Math.max(1, Math.round((bandY1 - bandY0 - 4) * (0.35 + 0.6 * clamp(l.syl / 12))));
+        rect(B, x, bandY1 - 2 - hh, w, hh, inks[i % 2 ? 0 : 1 % inks.length]);
+        x += w + Math.max(1, Math.round(k));
+      });
+    }
+
+    const SCENES = { poster: SCENES_poster, columns: SCENES_columns, tiles: SCENES_tiles, skyline: SCENES_skyline, knit: SCENES_knit };
+    SCENES[scene]();
+
+    /* ===== fine accents (2 output px) ===== */
+    const sx = AW / W0;
+    const nodes = lines.slice(0, 40).map((_, i) => {
+      const a = i * 2.39996 + rand() * 0.3;
+      const r = Math.sqrt((i + 0.5) / Math.min(40, lines.length)) * AH * 0.42;
+      return { x: AW / 2 + Math.cos(a) * r * 1.5 + (rand() - 0.5) * 60, y: AH / 2 + Math.sin(a) * r + (rand() - 0.5) * 40 };
+    });
+
+    // zigzag instrument lines: energy, dashes, glitch scene
+    const zig = Math.round(f.energy * 5 + f.dash * 4 + (scene === 'columns' ? 5 : 0));
+    for (let z = 0; z < zig; z++) {
+      let x = rand() * AW, y = rand() * AH;
+      let dx = rand() < 0.5 ? 1 : -1, dy = rand() < 0.5 ? 1 : -1;
+      const segs = 3 + Math.floor(rand() * 6);
+      for (let s = 0; s < segs; s++) {
+        const len = 10 + rand() * (s % 2 ? 30 : 140);
+        const nx = x + dx * len, ny = y + (s % 2 ? 0 : dy * len);
+        line(A, x, y, nx, ny, accent);
+        x = nx; y = ny;
+        if (rand() < 0.5) dy = -dy;
+      }
+    }
+
+    // network: rhymes become edges between line-nodes, plus nearest-neighbour threads
+    if (f.rhymePairs.length || f.rhyme > 0.1 || f.repetition > 0.3) {
+      const netC = contrast;
+      nodes.forEach((n, i) => {
+        const near = nodes.map((m, j) => ({ j, d: Math.hypot(m.x - n.x, m.y - n.y) })).filter((o) => o.j !== i).sort((a, b) => a.d - b.d).slice(0, 2);
+        near.forEach((o) => { if (rand() < 0.6) line(A, n.x, n.y, nodes[o.j].x, nodes[o.j].y, netC); });
+      });
+      f.rhymePairs.forEach(([i, j]) => { if (nodes[i] && nodes[j]) line(A, nodes[i].x, nodes[i].y, nodes[j].x, nodes[j].y, accent); });
+      nodes.forEach((n) => rect(A, n.x - 1, n.y - 1, 3, 3, netC));
+    }
+
+    // questions and open lines: thin rings
+    const ringSets = Math.round(clamp(f.question * 3 + f.openness * 2, 0, 4));
+    for (let r = 0; r < ringSets; r++) {
+      const cx = rand() * AW, cy = rand() * AH, k = 3 + Math.floor(rand() * 6), step = 4 + rand() * 10;
+      for (let i = 1; i <= k; i++) ring(A, cx, cy, i * step, contrast, i % 2 === 0);
+    }
+
+    // commas: dust
+    const dust = Math.round(40 + f.comma * 260 + (scene === 'skyline' ? 120 : 0));
+    for (let i = 0; i < dust; i++) {
+      const x = rand() * AW, y = rand() * AH;
+      if (rand() < 0.75) px(A, x, y, accent); else rect(A, x, y, 2, 2, contrast);
+    }
+
+    // regular meter: registration crosses, like a print sheet
+    if (f.meter > 0.6) {
+      const step = 120;
+      for (let y = 60; y < AH; y += step) for (let x = 60; x < AW; x += step) {
+        if (rand() < 0.5) continue;
+        line(A, x - 4, y, x + 4, y, contrast); line(A, x, y - 4, x, y + 4, contrast);
+      }
+    }
+    // "you": a fine dashed orbit
+    if (f.other > 0.05) {
+      const cx = AW * (0.3 + rand() * 0.4), cy = AH * (0.3 + rand() * 0.4);
+      ring(A, cx, cy, AH * (0.18 + f.other * 0.2), contrast, true);
+    }
+
+    /* ===== compose at 960×540, then scale ×2 ===== */
+    const mid = document.createElement('canvas');
+    mid.width = AW; mid.height = AH;
+    const mctx = mid.getContext('2d');
+    const img = mctx.createImageData(AW, AH);
+    const d = img.data;
+    for (let y = 0; y < AH; y++) {
+      const by = Math.min(H0 - 1, Math.floor(y / sx));
+      for (let x = 0; x < AW; x++) {
+        const a = A.d[y * AW + x];
+        const c = P[a >= 0 ? a : B.d[by * W0 + Math.min(W0 - 1, Math.floor(x / sx))]];
+        const i = (y * AW + x) * 4;
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+    }
+    mctx.putImageData(img, 0, 0);
+
+    const out = document.createElement('canvas');
+    out.width = OW; out.height = OH;
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mid, 0, 0, OW, OH);
+
+    /* ===== post: glitch rows, RGB split, stitch, scanlines, grain ===== */
+    const fin = ctx.getImageData(0, 0, OW, OH);
+    const q = fin.data;
+    const rowBytes = OW * 4;
+
+    const glitches = Math.round(f.energy * 6 + clamp(f.exclaim * 2) * 6 + (scene === 'columns' ? 4 : 0) + (rand() < 0.5 ? 1 : 0));
+    const tmp = new Uint8ClampedArray(rowBytes);
+    for (let g = 0; g < glitches; g++) {
+      const y0 = Math.floor(rand() * OH), h = 2 + Math.floor(rand() * 26);
+      const shift = Math.round((rand() - 0.5) * 2 * (20 + rand() * 140)) * 4;
+      for (let y = y0; y < Math.min(OH, y0 + h); y++) {
+        const off = y * rowBytes;
+        tmp.set(q.subarray(off, off + rowBytes));
+        for (let i = 0; i < rowBytes; i++) q[off + i] = tmp[((i - shift) % rowBytes + rowBytes) % rowBytes];
+      }
+    }
+
+    const split = scene === 'knit' ? 1 : 1 + Math.round(f.energy * 3 + (pal.dark ? 1 : 0));
+    if (split) {
+      const s4 = split * 4;
+      for (let y = 0; y < OH; y++) {
+        const off = y * rowBytes;
+        for (let i = rowBytes - 4; i >= s4; i -= 4) q[off + i] = q[off + i - s4];          // red right
+        for (let i = 0; i < rowBytes - s4; i += 4) q[off + i + 2] = q[off + i + 2 + s4];    // blue left
+      }
+    }
+
+    const cell = OW / W0;
+    const grain = 16 + Math.round((f.plosive + f.caps) * 10) + (pal.dark ? 6 : 0);
+    let s = seed | 1;
+    for (let y = 0; y < OH; y++) {
+      const scan = pal.dark && y % 3 === 0 ? 0.88 : 1;
+      for (let x = 0; x < OW; x++) {
+        let m = scan;
+        if (scene === 'knit') {
+          const u = (x % cell) / cell, v = (y % cell) / cell;
+          m *= 1 - 0.28 * Math.pow(Math.abs(u - 0.5) * 2, 2) - 0.1 * v + (Math.abs(u - 0.5) < 0.07 && v > 0.45 ? -0.18 : 0);
+        }
         s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
-        const n = ((s >>> 0) / 4294967296 - 0.5) * amt;
-        d[i] += n; d[i + 1] += n; d[i + 2] += n;
+        const n = (((s >>> 0) / 4294967296) - 0.5) * grain;
+        const cn = (((s >>> 8) & 255) / 255 - 0.5) * grain * 0.35;
+        const i = (y * OW + x) * 4;
+        q[i] = q[i] * m + n + cn;
+        q[i + 1] = q[i + 1] * m + n;
+        q[i + 2] = q[i + 2] * m + n - cn;
       }
-      ctx.putImageData(img, 0, 0);
-      if (pal.dark) {
-        const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 1.05);
-        g.addColorStop(0, 'rgba(0,0,0,0)');
-        g.addColorStop(1, 'rgba(0,0,0,0.35)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
-      }
-    } });
+    }
+    ctx.putImageData(fin, 0, 0);
 
-    const serial = seed.toString(16).toUpperCase().padStart(8, '0');
-    steps.push({ label: 'Signature', fn() {
-      ctx.save();
-      ctx.font = '500 15px "Martian Mono", ui-monospace, monospace';
-      ctx.textAlign = 'right';
-      ctx.fillStyle = rgba(pal.deep, 0.62);
-      const txt = `CONJURE  ·  ${mode.name.toUpperCase()}  ·  ${f.lineCount} LINES  ·  N° ${serial}`;
-      ctx.fillText(txt, W - 44, H - 38);
-      ctx.restore();
-    } });
-
-    return { mode, palette: pal, steps, serial };
+    return { canvas: out, scene, palette: pal.name, pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
   };
 })((window.Conjure = window.Conjure || {}));
