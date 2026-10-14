@@ -712,6 +712,81 @@
       ctx.save(); ctx.globalAlpha = 0.9; drawAscii(ctx, [cy - hh, cy + hh]); ctx.restore();
     }
 
+    /* ===== postmodern collage layer: crisp Memphis-style cut-outs over the grit ===== */
+    const pomoOn = wild ? rand() < 0.85 : rand() < 0.6;
+    grit.pomo = 0;
+    if (pomoOn) {
+      const n = 3 + Math.floor(rand() * (wild ? 8 : 5) + f.energy * 2 + f.openness * 2);
+      grit.pomo = n;
+      const ink = () => css(pickInk(), 1);
+      const black = 'rgba(15,15,18,1)';
+      const shadow = (fn, dx, dy) => { ctx.save(); ctx.translate(dx, dy); fn(black); ctx.restore(); fn(null); };
+      const kinds = ['halfdisc', 'triangle', 'squiggle', 'zigzag', 'dots', 'slab', 'arch', 'confetti', 'cutout', 'cutout', 'glyph', 'ring'];
+      const zone = () => ({ x: OW * (0.05 + rand() * 0.9), y: OH * (0.08 + rand() * 0.84) });
+      for (let e = 0; e < n; e++) {
+        const kind = kinds[Math.floor(rand() * kinds.length)];
+        const { x, y } = zone();
+        const S = OH * (0.06 + rand() * 0.18) * (wild ? 1.6 : 1);
+        const rot = (Math.floor(rand() * 8) * Math.PI) / 4 + (rand() - 0.5) * 0.3;
+        const col = ink(), col2 = ink();
+        const sh = Math.round(S * 0.08) + 4;
+        ctx.save();
+        ctx.translate(x, y); ctx.rotate(rot);
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        switch (kind) {
+          case 'halfdisc': shadow((c) => { ctx.fillStyle = c || col; ctx.beginPath(); ctx.arc(0, 0, S, Math.PI, 0); ctx.closePath(); ctx.fill(); }, sh, sh); break;
+          case 'triangle': shadow((c) => { ctx.fillStyle = c || col; ctx.beginPath(); ctx.moveTo(-S, S * 0.6); ctx.lineTo(S, S * 0.6); ctx.lineTo(-S * 0.2, -S * 0.9); ctx.closePath(); ctx.fill(); }, sh, sh); break;
+          case 'arch': shadow((c) => { ctx.strokeStyle = c || col; ctx.lineWidth = S * 0.28; ctx.beginPath(); ctx.arc(0, 0, S * 0.8, Math.PI, 0); ctx.stroke(); }, sh, sh); break;
+          case 'ring': shadow((c) => { ctx.strokeStyle = c || col; ctx.lineWidth = Math.max(6, S * 0.12); ctx.beginPath(); ctx.arc(0, 0, S, 0, Math.PI * 2); ctx.stroke(); }, sh, sh); break;
+          case 'squiggle': shadow((c) => {
+            ctx.strokeStyle = c || col; ctx.lineWidth = Math.max(8, S * 0.13); ctx.beginPath();
+            for (let i = 0; i <= 40; i++) { const t = i / 40, px = (t - 0.5) * S * 3.2, py = Math.sin(t * Math.PI * (3 + Math.floor(rand() * 0.01))) * S * 0.35; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+            ctx.stroke(); }, sh, sh); break;
+          case 'zigzag': shadow((c) => {
+            ctx.strokeStyle = c || col; ctx.lineWidth = Math.max(6, S * 0.1); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.beginPath();
+            for (let i = 0; i <= 8; i++) { const px = (i / 8 - 0.5) * S * 3, py = (i % 2 ? -1 : 1) * S * 0.25; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+            ctx.stroke(); }, sh, sh); break;
+          case 'dots': { ctx.fillStyle = rand() < 0.5 ? black : col; const g = Math.max(10, S * 0.18); for (let gy = -S; gy <= S; gy += g) for (let gx = -S * 1.4; gx <= S * 1.4; gx += g) { ctx.beginPath(); ctx.arc(gx, gy, g * 0.22, 0, Math.PI * 2); ctx.fill(); } break; }
+          case 'slab': shadow((c) => {
+            const w = S * 2.4, h = S * 0.9;
+            if (c) { ctx.fillStyle = c; ctx.fillRect(-w / 2, -h / 2, w, h); return; }
+            ctx.fillStyle = col; ctx.fillRect(-w / 2, -h / 2, w, h);
+            ctx.fillStyle = col2; const st = Math.max(6, h / 7); for (let yy = -h / 2; yy < h / 2; yy += st * 2) ctx.fillRect(-w / 2, yy, w, st);
+          }, sh, sh); break;
+          case 'confetti': for (let k = 0; k < 24; k++) {
+            ctx.save(); ctx.translate((rand() - 0.5) * S * 4, (rand() - 0.5) * S * 2.4); ctx.rotate(rand() * Math.PI);
+            ctx.fillStyle = rand() < 0.25 ? black : ink();
+            const t = rand(); if (t < 0.4) ctx.fillRect(-S * 0.12, -S * 0.03, S * 0.24, S * 0.06);
+            else if (t < 0.7) { ctx.beginPath(); ctx.moveTo(0, -S * 0.08); ctx.lineTo(S * 0.08, S * 0.06); ctx.lineTo(-S * 0.08, S * 0.06); ctx.fill(); }
+            else { ctx.beginPath(); ctx.arc(0, 0, S * 0.05, 0, Math.PI * 2); ctx.fill(); }
+            ctx.restore(); } break;
+          case 'glyph': {
+            const g = ['&', '§', 'N°', '※', '¶', '*', '+', '%', '?', '!'][Math.floor(rand() * 10)];
+            ctx.rotate(-rot + (rand() - 0.5) * 0.5);
+            ctx.font = `${rand() < 0.5 ? 'italic ' : ''}700 ${Math.round(S * 2.2)}px Georgia, "Times New Roman", serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillStyle = black; ctx.fillText(g, sh, sh);
+            ctx.fillStyle = col; ctx.fillText(g, 0, 0);
+            break;
+          }
+          case 'cutout': { // a piece of the picture itself, cut out and pasted elsewhere
+            ctx.restore(); ctx.save();
+            const w = S * (1.6 + rand() * 1.6), h = S * (1.1 + rand() * 1.2);
+            const sx = rand() * (OW - w), sy = rand() * (OH - h);
+            const piece = mk(w, h); piece.getContext('2d').drawImage(out, sx, sy, w, h, 0, 0, w, h);
+            ctx.translate(x, y); ctx.rotate((rand() < 0.3 ? Math.PI / 2 : 0) + (rand() - 0.5) * 0.12);
+            const bw = Math.max(6, S * 0.06);
+            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-w / 2 - bw + sh, -h / 2 - bw + sh, w + bw * 2, h + bw * 2);
+            ctx.fillStyle = '#fbfaf5'; ctx.fillRect(-w / 2 - bw, -h / 2 - bw, w + bw * 2, h + bw * 2);
+            if (rand() < 0.4) { ctx.translate(0, 0); ctx.scale(-1, 1); }
+            ctx.drawImage(piece, -w / 2, -h / 2);
+            break;
+          }
+        }
+        ctx.restore();
+      }
+    }
+
     function applyGrit() {
       // 1. gradient wash: a broad print-like gradient over everything, sometimes as vertical strips
       ctx.save();
