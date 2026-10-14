@@ -46,10 +46,30 @@
     { name: 'Peach Fog', c: ['#f3d6c6', '#ff3d6e', '#3a6fb0', '#f2ee8a', '#5b1530'], tags: { body: 0.7, water: 0.5, fire: 0.4 }, soft: 1, sky: 1 },
     { name: 'Seafoam', c: ['#d4efe8', '#2f4fd1', '#ff6b9a', '#fff2a8', '#1d2f6b'], tags: { water: 0.9, air: 0.4 }, soft: 1, sky: 0.9 },
     { name: 'Haze', c: ['#dcd7ea', '#ff4f8b', '#4b6bd6', '#f7d046', '#3d1440'], tags: { time: 0.6, earth: 0.4, love: 0.4 }, soft: 1, sky: 1 },
-    { name: 'Orchid', c: ['#f1e6f5', '#b44dff', '#ff7a3d', '#2a2a8a', '#7ee0c3'], tags: { love: 0.6, fire: 0.4, earth: 0.3 }, soft: 1, sky: 0.7 }
+    { name: 'Orchid', c: ['#f1e6f5', '#b44dff', '#ff7a3d', '#2a2a8a', '#7ee0c3'], tags: { love: 0.6, fire: 0.4, earth: 0.3 }, soft: 1, sky: 0.7 },
+    { name: 'Citrus', c: ['#fbf4d6', '#ff6a00', '#00a676', '#2b1b6f', '#ff9ec7'], tags: { fire: 0.6, earth: 0.5, time: 0.3 }, soft: 1, sky: 0.6 },
+    { name: 'Glacier', c: ['#e3f0f7', '#0d47ff', '#00d2c4', '#ff4f7b', '#14213d'], tags: { water: 0.8, air: 0.6, night: 0.2 }, soft: 1, sky: 1 },
+    { name: 'Rust', c: ['#efe1d1', '#c2410c', '#1e3a5f', '#f59e0b', '#7c2d12'], tags: { earth: 0.9, fire: 0.5, time: 0.4 }, soft: 1, sky: 0.8 },
+    { name: 'Candy', c: ['#fff0f6', '#ff1f8f', '#00b3ff', '#ffe600', '#7a00ff', '#00c27a'], tags: { love: 0.7, body: 0.4 }, soft: 1, energy: 0.6 },
+    { name: 'Moss', c: ['#e8eedf', '#2f6b3a', '#c8ff4d', '#ff5c8a', '#1b2a49'], tags: { earth: 1, water: 0.3 }, soft: 1, sky: 0.7 },
+    { name: 'Sunset Static', c: ['#ffe8d6', '#ff3c6f', '#6a2cff', '#ffb000', '#0b1d51'], tags: { fire: 0.7, love: 0.5, time: 0.4 }, soft: 1, sky: 1, energy: 0.5 },
+    { name: 'Ink Wash', c: ['#f4f1ea', '#1a1a2e', '#e63946', '#457b9d', '#a8dadc'], tags: { night: 0.4, water: 0.5, time: 0.5 }, soft: 1, sky: 0.8 },
+    { name: 'Infrared', c: ['#140b2e', '#ff2a6d', '#ffb800', '#05d9e8', '#d1f7ff'], tags: { fire: 0.6, body: 0.6, night: 0.5 }, dark: 1, energy: 0.9 }
   ];
   const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const toHex = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  function hueShift(hex, deg) { // rotate hue in HSL, keep saturation and lightness
+    let [r, g, b] = hexRgb(hex).map((v) => v / 255);
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (d === 0) return hex;
+    const sat0 = d / (1 - Math.abs(2 * l - 1));
+    let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h = (h * 60 + deg + 720) % 360;
+    const c = (1 - Math.abs(2 * l - 1)) * sat0, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+    const [rr, gg, bb] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return toHex([(rr + m) * 255, (gg + m) * 255, (bb + m) * 255]);
+  }
   const sat = (c) => Math.max(...c) - Math.min(...c);
 
   /* ---------- index buffers + pixel primitives ---------- */
@@ -128,12 +148,35 @@
   C.paint = function (f, seed, opts) {
     const rand = C.prng(seed);
     const noise = C.makeNoise(rand);
-    const picked = pickScene(f, rand);
-    const scene = (opts && opts.scene) || picked;
-    const pal = pickPalette(f, rand, scene, opts && opts.avoidPalette);
+    opts = opts || {};
+    // about 1 in 10 pieces breaks the rules: any scene, any palette, extreme settings
+    const wild = opts.wild !== undefined ? opts.wild : rand() < 0.1;
+    const ALL_SCENES = ['knit', 'skyline', 'ascii', 'poster', 'columns', 'tiles'];
+    const picked = wild ? ALL_SCENES[Math.floor(rand() * ALL_SCENES.length)] : pickScene(f, rand);
+    const scene = opts.scene || picked;
+    let pal = pickPalette(f, rand, scene, opts.avoidPalette);
+    if (wild && rand() < 0.6) { // ignore the scoring entirely
+      const pool = PALETTES.filter((p) => p.name !== opts.avoidPalette);
+      pal = pool[Math.floor(rand() * pool.length)];
+    }
+
+    // colour variation: shift hues, borrow inks from another palette, or add an extra ink
+    let hexes = pal.c.slice();
+    const other = PALETTES[Math.floor(rand() * PALETTES.length)];
+    const shiftRoll = rand();
+    if (shiftRoll < (wild ? 0.5 : 0.22)) {
+      const deg = (rand() < 0.5 ? -1 : 1) * (30 + rand() * 150);
+      hexes = hexes.map((h, i) => (i === 0 && !wild ? hueShift(h, deg * 0.3) : hueShift(h, deg)));
+    }
+    if (rand() < (wild ? 0.5 : 0.18) && other !== pal) { // borrow 1–2 inks
+      const n = 1 + Math.floor(rand() * 2);
+      for (let k = 0; k < n; k++) hexes[1 + Math.floor(rand() * (hexes.length - 1))] = other.c[1 + Math.floor(rand() * (other.c.length - 1))];
+    }
+    if (rand() < (wild ? 0.5 : 0.25) && hexes.length < 7) hexes.push(other.c[1 + Math.floor(rand() * (other.c.length - 1))]);
+    const paletteName = pal.name + (hexes.join() !== pal.c.join() ? ' (varied)' : '');
 
     // palette as RGB list; derived tones get appended on demand
-    const P = pal.c.map(hexRgb);
+    const P = hexes.map(hexRgb);
     const toneCache = {};
     function tone(i, j, t) {
       const k = i + ':' + j + ':' + t;
@@ -141,7 +184,7 @@
       P.push(P[i].map((v, n) => Math.round(v + (P[j][n] - v) * t)));
       return (toneCache[k] = P.length - 1);
     }
-    const base = pal.c.length;
+    const base = hexes.length;
     const G = 0; // ground
     const inks = Array.from({ length: base - 1 }, (_, i) => i + 1);
     const contrast = inks.reduce((a, b) => (Math.abs(lum(P[b]) - lum(P[G])) > Math.abs(lum(P[a]) - lum(P[G])) ? b : a));
@@ -150,13 +193,16 @@
 
     // pixel size: hard consonants -> chunky, soft sounds -> fine
     const delicacy = clamp(0.45 + 0.35 * f.sibilant + 0.3 * f.liquid - 0.45 * f.plosive + 0.2 * f.calm);
-    const widths = [192, 240, 320, 480];
-    let W0 = widths[Math.round(delicacy * 3)];
-    if (scene === 'tiles') W0 = 480;
-    if (scene === 'columns') W0 = 240;
-    if (scene === 'knit') W0 = delicacy > 0.5 && rand() < 0.6 ? 240 : 160;
-    if (scene === 'skyline') W0 = 320;
+    // wider range of square sizes: 96 wide = 20px squares, 640 wide = 3px squares
+    const widths = [96, 128, 160, 192, 240, 320, 480, 640];
+    const nudge = Math.round((rand() - 0.5) * 3);
+    let W0 = widths[clamp(Math.round(1 + delicacy * 5) + nudge, 0, widths.length - 1)];
+    if (scene === 'tiles') W0 = rand() < 0.5 ? 320 : 480;
+    if (scene === 'columns') W0 = rand() < 0.5 ? 192 : 240;
+    if (scene === 'knit') W0 = [96, 128, 160, 240, 320][clamp(Math.round(delicacy * 3) + nudge, 0, 4)];
+    if (scene === 'skyline') W0 = [192, 240, 320, 480][clamp(Math.round(delicacy * 2) + 1 + nudge, 0, 3)];
     if (scene === 'ascii') W0 = 240;
+    if (wild) W0 = widths[Math.floor(rand() * widths.length)];
     const H0 = Math.round((W0 * 9) / 16);
     const B = buf(W0, H0, G);
     const A = buf(AW, AH, -1);
@@ -637,6 +683,17 @@
     if (scene === 'ascii') { // keep the characters legible: lighter blur, spray and wash; melt and smear stay
       grit.blur *= 0.35; grit.spray *= 0.35; grit.wash *= 0.55; grit.cones = Math.min(grit.cones, 1);
     }
+    if (wild) { // every dial pushed to an extreme, one way or the other
+      for (const k of ['wash', 'melt', 'smear', 'blur', 'spray', 'strings']) grit[k] = rand() < 0.55 ? clamp(0.75 + rand() * 0.25) : rand() * 0.15;
+      grit.cones = Math.floor(rand() * 7);
+    }
+    // heatmap: thermal-camera colouring of a region, bands, or the whole piece
+    const heatRoll = rand();
+    grit.heat = wild
+      ? (heatRoll < 0.35 ? 'full' : heatRoll < 0.6 ? 'region' : heatRoll < 0.75 ? 'bands' : 'none')
+      : (heatRoll < 0.04 + f.intensity * 0.04 ? 'full' : heatRoll < 0.16 + f.intensity * 0.1 ? 'region' : heatRoll < 0.24 + f.energy * 0.08 ? 'bands' : 'none');
+    grit.heatPalette = rand() < 0.45 ? 'palette' : 'thermal';
+    grit.mosaic = rand() < (wild ? 0.7 : 0.3) ? 1 + Math.floor(rand() * (wild ? 5 : 3)) : 0;
 
     function mk(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
     function blurred(src, k) {
@@ -837,12 +894,70 @@
       }
     }
 
-    /* ===== post: glitch rows, RGB split, stitch, scanlines, grain ===== */
+    /* ===== post: mosaic, heatmap, glitch rows, RGB split, stitch, scanlines, grain ===== */
     const fin = ctx.getImageData(0, 0, OW, OH);
     const q = fin.data;
     const rowBytes = OW * 4;
 
-    const glitches = Math.round(f.energy * 6 + clamp(f.exclaim * 2) * 6 + (scene === 'columns' ? 4 : 0) + (rand() < 0.5 ? 1 : 0));
+    // mosaic patches: a few rectangles re-pixelated at a much bigger square size
+    for (let m = 0; m < grit.mosaic; m++) {
+      const b = [24, 32, 48, 64, 96][Math.floor(rand() * 5)];
+      const w = Math.round((OW * (0.12 + rand() * 0.35)) / b) * b, h = Math.round((OH * (0.12 + rand() * 0.4)) / b) * b;
+      const x0 = Math.floor((rand() * (OW - w)) / b) * b, y0 = Math.floor((rand() * (OH - h)) / b) * b;
+      for (let by = y0; by < y0 + h; by += b) for (let bx = x0; bx < x0 + w; bx += b) {
+        const si = (Math.min(OH - 1, by + (b >> 1)) * OW + Math.min(OW - 1, bx + (b >> 1))) * 4;
+        const r = q[si], g = q[si + 1], bl = q[si + 2];
+        for (let y = by; y < Math.min(OH, by + b); y++) for (let x = bx; x < Math.min(OW, bx + b); x++) {
+          const i = (y * OW + x) * 4; q[i] = r; q[i + 1] = g; q[i + 2] = bl;
+        }
+      }
+    }
+
+    // heatmap
+    if (grit.heat !== 'none') {
+      const stops = grit.heatPalette === 'thermal'
+        ? ['#07031f', '#1c1294', '#7a1bd0', '#e0177c', '#ff4a1c', '#ff9a00', '#ffe14d', '#fffbe8'].map(hexRgb)
+        : [P[G], ...inks.map((i) => P[i])].sort((a, b) => lum(a) - lum(b));
+      const lut = new Uint8ClampedArray(256 * 3);
+      for (let v = 0; v < 256; v++) {
+        const t = (v / 255) * (stops.length - 1), k = Math.min(stops.length - 2, Math.floor(t)), u = t - k;
+        for (let c = 0; c < 3; c++) lut[v * 3 + c] = stops[k][c] + (stops[k + 1][c] - stops[k][c]) * u;
+      }
+      // mask at quarter resolution
+      const MW = OW / 4, MH = OH / 4, mask = new Float32Array(MW * MH);
+      const ho = rand() * 100, hs = 0.006 + rand() * 0.01;
+      const vertical = rand() < 0.5, nb = 3 + Math.floor(rand() * 6);
+      for (let my = 0; my < MH; my++) for (let mx = 0; mx < MW; mx++) {
+        let m = 1;
+        if (grit.heat === 'region') m = clamp((unit(fbm(noise, mx * hs + ho, my * hs, 3) * 1.5) - 0.55) * 6);
+        else if (grit.heat === 'bands') { const p = (vertical ? mx / MW : my / MH) * nb; m = (Math.floor(p) % 2 === 0 && (p % 1) > 0.15) ? 1 : 0; }
+        mask[my * MW + mx] = m;
+      }
+      const amt = grit.heat === 'full' ? 0.92 : 0.88;
+      const contrastK = 1.25;
+      for (let y = 0; y < OH; y++) for (let x = 0; x < OW; x++) {
+        const m = mask[(y >> 2) * MW + (x >> 2)] * amt;
+        if (m <= 0.01) continue;
+        const i = (y * OW + x) * 4;
+        const l = clamp(((0.2126 * q[i] + 0.7152 * q[i + 1] + 0.0722 * q[i + 2]) / 255 - 0.5) * contrastK + 0.5);
+        const li = Math.round(l * 255) * 3;
+        q[i] += (lut[li] - q[i]) * m; q[i + 1] += (lut[li + 1] - q[i + 1]) * m; q[i + 2] += (lut[li + 2] - q[i + 2]) * m;
+      }
+    }
+
+    // rule-breaking extras
+    if (wild) {
+      if (rand() < 0.3) { // mirror: fold left onto right (or top onto bottom)
+        const vert = rand() < 0.35;
+        if (!vert) for (let y = 0; y < OH; y++) for (let x = OW >> 1; x < OW; x++) {
+          const d = (y * OW + x) * 4, sI = (y * OW + (OW - 1 - x)) * 4; q[d] = q[sI]; q[d + 1] = q[sI + 1]; q[d + 2] = q[sI + 2];
+        }
+        else for (let y = OH >> 1; y < OH; y++) q.copyWithin(y * rowBytes, (OH - 1 - y) * rowBytes, (OH - y) * rowBytes);
+      }
+      if (rand() < 0.15) for (let i = 0; i < q.length; i += 4) { q[i] = 255 - q[i]; q[i + 1] = 255 - q[i + 1]; q[i + 2] = 255 - q[i + 2]; }
+    }
+
+    const glitches = Math.round(f.energy * 6 + clamp(f.exclaim * 2) * 6 + (scene === 'columns' ? 4 : 0) + (rand() < 0.5 ? 1 : 0) + (wild ? 6 + rand() * 20 : 0));
     const tmp = new Uint8ClampedArray(rowBytes);
     for (let g = 0; g < glitches; g++) {
       const y0 = Math.floor(rand() * OH), h = 2 + Math.floor(rand() * 26);
@@ -854,7 +969,7 @@
       }
     }
 
-    const split = scene === 'knit' ? 1 : 1 + Math.round(f.energy * 3 + (pal.dark ? 1 : 0));
+    const split = wild ? 3 + Math.round(rand() * 14) : scene === 'knit' ? 1 : 1 + Math.round(f.energy * 3 + (pal.dark ? 1 : 0));
     if (split) {
       const s4 = split * 4;
       for (let y = 0; y < OH; y++) {
@@ -886,6 +1001,30 @@
     }
     ctx.putImageData(fin, 0, 0);
 
-    return { canvas: out, scene, grit, palette: pal.name, colors: pal.c.slice(), pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
+    // splice: a second scene cut in along a stepped, pixel-jagged edge
+    let spliced = null;
+    if (wild && !opts.noSplice && rand() < 0.4) {
+      const otherScene = ALL_SCENES.filter((k) => k !== scene)[Math.floor(rand() * (ALL_SCENES.length - 1))];
+      const second = C.paint(f, (seed ^ 0x5bd1e995) >>> 0, { scene: otherScene, wild: false, noSplice: true, avoidPalette: opts.avoidPalette });
+      const step = [16, 32, 64][Math.floor(rand() * 3)], vert = rand() < 0.6;
+      const at = (vert ? OW : OH) * (0.3 + rand() * 0.4);
+      ctx.save();
+      ctx.beginPath();
+      if (vert) {
+        ctx.moveTo(OW, 0);
+        for (let y = 0; y <= OH; y += step) { const x = at + Math.round((rand() - 0.5) * 6) * step; ctx.lineTo(x, y); ctx.lineTo(x, y + step); }
+        ctx.lineTo(OW, OH);
+      } else {
+        ctx.moveTo(0, OH);
+        for (let x = 0; x <= OW; x += step) { const y = at + Math.round((rand() - 0.5) * 6) * step; ctx.lineTo(x, y); ctx.lineTo(x + step, y); }
+        ctx.lineTo(OW, OH);
+      }
+      ctx.closePath(); ctx.clip();
+      ctx.drawImage(second.canvas, 0, 0);
+      ctx.restore();
+      spliced = otherScene;
+    }
+
+    return { canvas: out, scene, spliced, wild, grit, palette: pal.name, paletteLabel: paletteName, colors: hexes.slice(), pixel: Math.round(cell), serial: seed.toString(16).toUpperCase().padStart(8, '0') };
   };
 })((window.Conjure = window.Conjure || {}));

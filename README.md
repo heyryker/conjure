@@ -38,6 +38,13 @@ Other mappings: hard consonants make bigger pixels, soft ones finer; dashes and 
 
 Every conjuring is one of a kind: the seed mixes the poem with a random value. The poem is cleared from the page on submit and is never stored or sent anywhere.
 
+## Variation
+
+- **Square sizes:** the low-res buffer ranges from 96 to 640 squares wide (about 20px down to 3px squares), nudged by the poem's sound and a random offset. Mosaic patches sometimes re-pixelate rectangles at 24–96px.
+- **Colour:** 25 palettes. About 1 in 5 pieces has its hues rotated, some borrow inks from another palette, and some gain an extra ink, so colour isn't limited to the fixed list.
+- **Heatmap:** a thermal-camera recolouring (deep blue → magenta → red → orange → white-hot, or the piece's own palette ramped by brightness), applied to a noise-shaped region, in bands, or rarely over the whole image. More intense and energetic poems get it more often.
+- **Breaking the rules:** about 1 in 10 pieces is wild: any of the six scenes, any palette (dark ones included), every effect pushed to an extreme in one direction or the other, any square size, heavy glitch and RGB split, and sometimes a mirror fold, inverted colour, or a second scene spliced in along a jagged pixel edge.
+
 ## Reveal
 
 After Submit the picture dissolves in as 16px blocks that arrive in clumps along a ragged front moving from top to bottom, in uneven lurches with brief freezes, stray blocks landing ahead and torn strips flickering sideways along the edge (about 1.5–2 seconds) (instant for people with reduced motion on). It never uses the same, or a near-identical, palette as the landing page backdrop.
