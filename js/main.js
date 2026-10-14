@@ -187,7 +187,7 @@
   }
 
   // paint after first frame so the card shows immediately
-  requestAnimationFrame(() => setTimeout(paintBackdrop, 60));
+  setTimeout(paintBackdrop, 80); // a timer, not rAF, so it still paints in a background tab
 
   poem.focus();
 })((window.Conjure = window.Conjure || {}));
