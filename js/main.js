@@ -162,20 +162,30 @@
     bd.width = piece.canvas.width; bd.height = piece.canvas.height;
     bd.getContext('2d').drawImage(piece.canvas, 0, 0);
     bd.classList.add('ready');
-    $('.logo').style.color = logoColor(piece.colors);
+    $('.card-head').style.backgroundColor = bannerColor(piece.colors, bd);
   }
-  // pick a palette color that reads on the white card: most vivid among those with enough contrast
-  function logoColor(hexes) {
+  // banner: a palette color that stands apart from what dominates the backdrop,
+  // deepened if needed so the white logo reads on it (contrast >= 3:1)
+  function bannerColor(hexes, bd) {
+    const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
     const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-    const info = hexes.map((h) => {
-      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-      const L = 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
-      return { h, contrast: 1.05 / (L + 0.05), sat: Math.max(...c) - Math.min(...c) };
-    });
-    const readable = info.filter((x) => x.contrast >= 3);
-    if (readable.length) return readable.sort((a, b) => b.sat - a.sat)[0].h;
-    return info.sort((a, b) => b.contrast - a.contrast)[0].h;
+    const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+    const onWhite = (c) => 1.05 / (lum(c) + 0.05);
+    // average backdrop color from a coarse sample
+    const s = document.createElement('canvas'); s.width = 48; s.height = 27;
+    const sx = s.getContext('2d'); sx.drawImage(bd, 0, 0, 48, 27);
+    const d = sx.getImageData(0, 0, 48, 27).data;
+    const avg = [0, 0, 0];
+    for (let i = 0; i < d.length; i += 4) { avg[0] += d[i]; avg[1] += d[i + 1]; avg[2] += d[i + 2]; }
+    avg.forEach((v, i) => { avg[i] = v / (d.length / 4); });
+    const dist = (c) => Math.hypot(c[0] - avg[0], c[1] - avg[1], c[2] - avg[2]);
+    const sat = (c) => Math.max(...c) - Math.min(...c);
+    const deepen = (c) => { let k = 1; let o = c; while (onWhite(o) < 3 && k > 0.2) { k -= 0.05; o = c.map((v) => Math.round(v * k)); } return o; };
+    const best = hexes.map(rgb).filter((c) => sat(c) > 40).map(deepen)
+      .sort((a, b) => (dist(b) + sat(b) * 0.5) - (dist(a) + sat(a) * 0.5))[0] || [17, 17, 17];
+    return `rgb(${best.join(',')})`;
   }
+
   // paint after first frame so the card shows immediately
   requestAnimationFrame(() => setTimeout(paintBackdrop, 60));
 
