@@ -30,18 +30,23 @@
 
   /* ---------- palettes: first color is the ground ---------- */
   const PALETTES = [
-    { name: 'Periwinkle', c: ['#7f83f2', '#5c0e2e', '#ff8ad8', '#e8e6ff'], tags: { air: 1, water: 0.5, time: 0.3 }, sky: 1 },
+    { name: 'Periwinkle', c: ['#7f83f2', '#5c0e2e', '#ff8ad8', '#e8e6ff'], tags: { air: 1, water: 0.5, time: 0.3 }, sky: 1, soft: 1 },
     { name: 'Sage', c: ['#d8dfa3', '#ff6fd2', '#5c0e2e', '#7f83f2'], tags: { earth: 1, love: 0.7 } },
     { name: 'Blaze', c: ['#ff5717', '#58102b', '#ffb199', '#ffe14a'], tags: { fire: 1, body: 0.6 } },
     { name: 'Neon', c: ['#060608', '#00e7ff', '#ff1fc7', '#ffe81a', '#13d66b', '#ff4a1c'], tags: { night: 1, fire: 0.4 }, dark: 1, energy: 1 },
     { name: 'Knit', c: ['#2a5bd7', '#3fd17a', '#ffe04a', '#ff5d78'], tags: { water: 0.7, time: 0.6, earth: 0.4 } },
     { name: 'Pop', c: ['#ffffff', '#1aa1ff', '#ff2b8c', '#ffe500', '#121212', '#ff7b57'], tags: { time: 0.8, love: 0.4 }, energy: 0.6 },
-    { name: 'Dusk', c: ['#cfc6b4', '#ff4f6e', '#3c7aa6', '#ece36a'], tags: { body: 0.8, water: 0.7, earth: 0.5 }, sky: 1 },
+    { name: 'Dusk', c: ['#cfc6b4', '#ff4f6e', '#3c7aa6', '#ece36a'], tags: { body: 0.8, water: 0.7, earth: 0.5 }, sky: 1, soft: 1 },
     { name: 'Acid', c: ['#0d0d10', '#c8ff00', '#ff3ea5', '#6c5cff'], tags: { night: 0.7, fire: 0.3 }, dark: 1, energy: 0.9 },
     { name: 'Lagoon', c: ['#06283a', '#16e0c6', '#ff8a3d', '#f2efe0'], tags: { water: 1, night: 0.4 }, dark: 1, sky: 0.5 },
     { name: 'Bubblegum', c: ['#ffd3ea', '#1f1ad8', '#ff5a36', '#7be0ff'], tags: { love: 1, air: 0.6 }, sky: 0.6 },
     { name: 'Mint', c: ['#b9f6d9', '#2b1a90', '#ff4fa1', '#ffe14a'], tags: { earth: 0.7, air: 0.5 }, sky: 0.6 },
-    { name: 'Ultraviolet', c: ['#18063a', '#ff4fd9', '#40f0ff', '#fff46a'], tags: { night: 1, love: 0.4 }, dark: 1, sky: 0.5 }
+    { name: 'Ultraviolet', c: ['#18063a', '#ff4fd9', '#40f0ff', '#fff46a'], tags: { night: 1, love: 0.4 }, dark: 1, sky: 0.5 },
+    { name: 'Lilac', c: ['#e9e4ff', '#8a7bff', '#ff5fa8', '#4a1d5e', '#ffd166'], tags: { air: 0.7, love: 0.6, night: 0.3 }, soft: 1, sky: 0.8 },
+    { name: 'Peach Fog', c: ['#f3d6c6', '#ff3d6e', '#3a6fb0', '#f2ee8a', '#5b1530'], tags: { body: 0.7, water: 0.5, fire: 0.4 }, soft: 1, sky: 1 },
+    { name: 'Seafoam', c: ['#d4efe8', '#2f4fd1', '#ff6b9a', '#fff2a8', '#1d2f6b'], tags: { water: 0.9, air: 0.4 }, soft: 1, sky: 0.9 },
+    { name: 'Haze', c: ['#dcd7ea', '#ff4f8b', '#4b6bd6', '#f7d046', '#3d1440'], tags: { time: 0.6, earth: 0.4, love: 0.4 }, soft: 1, sky: 1 },
+    { name: 'Orchid', c: ['#f1e6f5', '#b44dff', '#ff7a3d', '#2a2a8a', '#7ee0c3'], tags: { love: 0.6, fire: 0.4, earth: 0.3 }, soft: 1, sky: 0.7 }
   ];
   const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
@@ -87,14 +92,13 @@
   /* ---------- scene choice ---------- */
   function pickScene(f, rand) {
     const t = f.themes;
+    // Rotation is the soft, melting direction: a dithered landscape or a dithered colour field.
+    // poster / columns / tiles remain available through opts.scene.
     const scores = {
-      poster: 0.45 + (f.stanzaCount > 1 ? 0.25 : 0) + f.rhyme * 0.3 + f.meter * 0.15,
-      columns: f.energy * 0.9 + (t.night || 0) * 0.6 + clamp(f.exclaim * 2) * 0.4 + (t.fire || 0) * 0.2,
-      tiles: f.repetition * 0.9 + f.meter * 0.3 + (f.wordCount > 70 ? 0.2 : 0) + (t.time || 0) * 0.3,
-      skyline: ((t.earth || 0) + (t.water || 0)) * 0.6 + f.calm * 0.45 + (t.air || 0) * 0.2,
-      knit: f.intensity * 0.35 + f.liquid * 0.35 + (t.love || 0) * 0.5 + (t.body || 0) * 0.3
+      skyline: ((t.earth || 0) + (t.water || 0)) * 0.6 + f.calm * 0.45 + (t.air || 0) * 0.3 + f.meter * 0.15,
+      knit: f.intensity * 0.35 + f.liquid * 0.35 + (t.love || 0) * 0.5 + (t.body || 0) * 0.3 + f.enjambment * 0.2
     };
-    let best = 'poster', bs = -1;
+    let best = 'knit', bs = -1;
     for (const k in scores) { const s = scores[k] + rand() * 0.55; if (s > bs) { bs = s; best = k; } }
     return best;
   }
@@ -102,7 +106,7 @@
   function pickPalette(f, rand, scene) {
     let best = PALETTES[0], bs = -Infinity;
     for (const p of PALETTES) {
-      let s = rand() * 0.7;
+      let s = rand() * 0.7 + (p.soft ? 0.7 : 0) - (p.dark ? 0.6 : 0);
       for (const k in p.tags) s += (f.themes[k] || 0) * p.tags[k];
       s += (p.energy || 0) * f.energy * 0.5;
       if (p.dark) s += (f.sentiment < -0.1 ? 0.35 : 0) + (scene === 'columns' ? 1.2 : 0);
@@ -144,7 +148,7 @@
     let W0 = widths[Math.round(delicacy * 3)];
     if (scene === 'tiles') W0 = 480;
     if (scene === 'columns') W0 = 240;
-    if (scene === 'knit') W0 = 160;
+    if (scene === 'knit') W0 = delicacy > 0.5 && rand() < 0.6 ? 240 : 160;
     if (scene === 'skyline') W0 = 320;
     const H0 = Math.round((W0 * 9) / 16);
     const B = buf(W0, H0, G);
@@ -427,7 +431,9 @@
       const ramp = inks.length >= 3 ? [inks[0], G, inks[1], inks[2]] : [G, inks[0]];
       const corner = [inks[inks.length - 1], ramp[0]];
       const sc = 1.6 + rand() * 1.2, o = rand() * 50;
-      const cx = 0.6 + rand() * 0.6, cy = 0.35 + rand() * 0.2;
+      const blooms = Array.from({ length: clamp(f.stanzaCount || 1, 1, 4) }, () => ({ x: 0.2 + rand() * 1.4, y: 0.2 + rand() * 0.6, r: 0.9 + rand() * 0.9 }));
+      const warp = 0.6 + f.sibilant * 0.8 + rand() * 0.6;
+      const hasBand = rand() < 0.55;
       const bandY0 = Math.round(H0 * 0.8), bandY1 = Math.round(H0 * 0.93);
       for (let y = 0; y < H0; y++) {
         for (let x = 0; x < W0; x++) {
@@ -435,12 +441,15 @@
           const thr = bayer(x, y) * 0.5 + ((C.seed32(x + ',' + y + ',' + o) % 1000) / 1000) * 0.5;
           const inCorner = nx + (1 - ny) * 0.8 > (W0 / H0) * 0.92 + fbm(noise, nx * 4, ny * 4 + o, 2) * 0.25;
           const r = inCorner ? corner : ramp;
-          let v = unit(fbm(noise, nx * sc + o, ny * sc, 4) * 1.3) * 0.7 + clamp(1 - Math.hypot(nx - cx, ny - cy) * 1.4) * 0.45;
+          const q = fbm(noise, nx * 1.1 + o + 3, ny * 1.1, 2) * warp;
+          let v = unit(fbm(noise, nx * sc + o + q, ny * sc + q, 4) * 1.3) * 0.65;
+          for (const b of blooms) v += clamp(1 - Math.hypot(nx + q * 0.3 - b.x, ny - b.y) * b.r) * 0.4;
           v = clamp(v);
           const lvl = clamp(Math.floor(v * (r.length - 1) + thr), 0, r.length - 1);
           B.d[y * W0 + x] = r[lvl];
         }
       }
+      if (!hasBand) return;
       // band: one block per line, width from word count
       const bx0 = 2, bx1 = W0 - 3;
       rect(B, bx0, bandY0, bx1 - bx0, bandY1 - bandY0, inks[2 % inks.length]);
@@ -549,7 +558,7 @@
     const grit = {
       wash: clamp(0.35 + f.intensity * 0.35 + rand() * 0.3),
       cones: Math.round(rand() * 2 + f.openness * 3 + f.vowelBright * 2),
-      melt: clamp((f.sentiment < 0 ? -f.sentiment : 0) * 0.8 + (f.themes.fire || 0) * 0.6 + (f.themes.night || 0) * 0.3 + rand() * 0.4),
+      melt: clamp(0.3 + (f.sentiment < 0 ? -f.sentiment : 0) * 0.8 + (f.themes.fire || 0) * 0.6 + (f.themes.night || 0) * 0.3 + rand() * 0.4),
       smear: clamp(0.35 + f.sibilant * 0.35 + f.enjambment * 0.3 + rand() * 0.3),
       blur: clamp(0.35 + f.calm * 0.35 + f.liquid * 0.3 + rand() * 0.3),
       spray: clamp(0.3 + clamp(f.comma) * 0.35 + f.plosive * 0.3 + rand() * 0.35),
