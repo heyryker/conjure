@@ -47,7 +47,7 @@ Every conjuring is one of a kind: the seed mixes the poem with a random value. T
 
 ## Grunge
 
-About 75% of pieces (90% of wild ones) get a grunge pass after the grit: photocopier contrast crush, patchy grime that gathers toward the edges, fold creases (a dark valley beside a bright ridge), coffee-ring stains and soft blots, long film scratches and short scuffs, dust and the odd hair, and burnt, uneven edges. How dirty it gets rises with darker feeling, hard consonants, and night or earth imagery.
+About 75% of pieces (90% of wild ones) get a grunge pass after the grit: photocopier contrast crush, fold creases (a dark valley beside a bright ridge), long film scratches and short scuffs, dust and the odd hair, and burnt, uneven edges. How dirty it gets rises with darker feeling, hard consonants, and night or earth imagery.
 
 ## Reveal
 

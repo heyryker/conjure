@@ -712,7 +712,7 @@
       ctx.save(); ctx.globalAlpha = 0.9; drawAscii(ctx, [cy - hh, cy + hh]); ctx.restore();
     }
 
-    /* ===== grunge: photocopy contrast, grime, scratches, dust and hair, creases, stains, burnt edges ===== */
+    /* ===== grunge: photocopy contrast, creases, film scratches, dust and hair, burnt edges ===== */
     const grungeOn = wild ? rand() < 0.9 : rand() < 0.75;
     const dirt = clamp(0.35 + (f.sentiment < 0 ? -f.sentiment * 0.5 : 0) + f.plosive * 0.25 + (f.themes.night || 0) * 0.3 + (f.themes.earth || 0) * 0.2 + rand() * 0.35);
     grit.grunge = grungeOn ? Math.round(dirt * 100) / 100 : 0;
@@ -731,21 +731,6 @@
         ctx.putImageData(im, 0, 0);
       }
 
-      // grime: blotchy, uneven darkening (multiply) built at low res and stretched
-      {
-        const gw = 240, gh = 135, g = mk(gw, gh), gc = g.getContext('2d'), im = gc.createImageData(gw, gh), d = im.data;
-        const o = rand() * 50, sc = 0.03 + rand() * 0.03;
-        for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
-          const v = unit(fbm(noise, x * sc + o, y * sc + 3, 5) * 1.6);
-          const edge = Math.min(x / gw, 1 - x / gw, y / gh, 1 - y / gh); // edges get dirtier
-          const a = clamp((v - 0.58) * 2.4 + (0.1 - edge) * 2.5) * (0.14 + dirt * 0.26);
-          const i = (y * gw + x) * 4; d[i] = 70; d[i + 1] = 52; d[i + 2] = 40; d[i + 3] = a * 255;
-        }
-        gc.putImageData(im, 0, 0);
-        ctx.save(); ctx.imageSmoothingEnabled = true; ctx.globalCompositeOperation = 'multiply';
-        ctx.drawImage(g, 0, 0, OW, OH); ctx.restore();
-      }
-
       // creases: a fold across the sheet, a bright ridge beside a dark valley
       const folds = rand() < 0.5 + dirt * 0.3 ? 1 + Math.floor(rand() * (wild ? 4 : 2)) : 0;
       for (let k = 0; k < folds; k++) {
@@ -757,26 +742,6 @@
         ctx.beginPath(); horiz ? (ctx.moveTo(0, pos + 3), ctx.lineTo(OW, pos + tilt + 3)) : (ctx.moveTo(pos + 3, 0), ctx.lineTo(pos + tilt + 3, OH)); ctx.stroke();
         ctx.lineWidth = 40; ctx.strokeStyle = dark + '0.06)'; // soft shadow either side
         ctx.beginPath(); horiz ? (ctx.moveTo(0, pos - 18), ctx.lineTo(OW, pos + tilt - 18)) : (ctx.moveTo(pos - 18, 0), ctx.lineTo(pos + tilt - 18, OH)); ctx.stroke();
-        ctx.restore();
-      }
-
-      // stains: irregular ring marks and soft blots
-      const stains = rand() < 0.35 + dirt * 0.4 ? 1 + Math.floor(rand() * (wild ? 4 : 2)) : 0;
-      for (let k = 0; k < stains; k++) {
-        const cx = rand() * OW, cy = rand() * OH, R = OH * (0.06 + rand() * 0.14), o = rand() * 10;
-        ctx.save(); ctx.globalCompositeOperation = 'multiply';
-        const ring = rand() < 0.65;
-        for (let pass = 0; pass < (ring ? 3 : 1); pass++) {
-          ctx.beginPath();
-          for (let i = 0; i <= 90; i++) {
-            const a = (i / 90) * TAU, rr = R * (1 + 0.12 * noise(Math.cos(a) * 1.4 + o + pass, Math.sin(a) * 1.4));
-            i ? ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
-          }
-          ctx.closePath();
-          if (ring) { ctx.lineWidth = 2 + rand() * 5; ctx.strokeStyle = 'rgba(120,80,40,' + (0.25 + dirt * 0.25) + ')'; ctx.stroke(); }
-          else { const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R); rg.addColorStop(0, 'rgba(110,80,50,0.05)'); rg.addColorStop(0.85, 'rgba(110,80,50,' + (0.18 + dirt * 0.2) + ')'); rg.addColorStop(1, 'rgba(110,80,50,0)'); ctx.fillStyle = rg; ctx.fill(); }
-        }
-        if (ring) { ctx.fillStyle = 'rgba(130,95,60,0.06)'; ctx.fill(); }
         ctx.restore();
       }
 
